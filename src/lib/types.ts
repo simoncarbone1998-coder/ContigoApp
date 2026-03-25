@@ -64,6 +64,9 @@ export interface Appointment {
   summary: string | null
   completed: boolean
   completed_at: string | null
+  daily_room_name: string | null
+  daily_room_url: string | null
+  room_created_at: string | null
   created_at: string
   patient?: Pick<Profile, 'id' | 'full_name' | 'email' | 'phone' | 'city' | 'birth_date'>
   doctor?: Pick<Profile, 'id' | 'full_name' | 'email' | 'specialty' | 'avatar_url'>

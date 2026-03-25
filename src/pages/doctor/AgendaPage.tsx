@@ -4,9 +4,17 @@ import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import NavBar from '../../components/NavBar'
 import MiniCalendar from '../../components/MiniCalendar'
+import DoctorVideoCall from '../../components/DoctorVideoCall'
 import { specialtyLabel } from '../../lib/types'
 import type { AvailabilitySlot, Appointment } from '../../lib/types'
 import { generateSlots, roundUpToSlot } from '../../lib/slots'
+import { createDailyRoom, createDailyToken } from '../../services/dailyService'
+
+/** Returns minutes until slot starts (negative = already started) */
+function minutesUntil(slotDate: string, slotStartTime: string): number {
+  const slotMs = new Date(`${slotDate}T${slotStartTime}`).getTime()
+  return (slotMs - Date.now()) / 60000
+}
 
 function formatDate(d: string) {
   const [y, m, day] = d.split('-')
@@ -58,6 +66,12 @@ export default function DoctorAgendaPage() {
   // History modal
   const [historyAppt, setHistoryAppt] = useState<Appointment | null>(null)
 
+  // Video call
+  const [videoAppt,    setVideoAppt]    = useState<Appointment | null>(null)
+  const [videoToken,   setVideoToken]   = useState<string | null>(null)
+  const [joiningVideo, setJoiningVideo] = useState(false)
+  const [videoError,   setVideoError]   = useState<string | null>(null)
+
   if (profile && !profile.specialty) {
     navigate('/doctor/setup', { replace: true })
     return null
@@ -87,6 +101,58 @@ export default function DoctorAgendaPage() {
   }, [profile])
 
   useEffect(() => { fetchData() }, [fetchData])
+
+  // Auto-create Daily rooms for appointments within 10 minutes
+  useEffect(() => {
+    if (appointments.length === 0) return
+    for (const appt of appointments) {
+      const slot = slots.find((s) => s.id === appt.slot_id)
+      if (!slot || appt.daily_room_url) continue
+      const mins = minutesUntil(slot.date, slot.start_time)
+      if (mins <= 10 && mins > -60) {
+        createDailyRoom(appt.id)
+          .then(({ name, url }) =>
+            supabase.from('appointments').update({
+              daily_room_name: name,
+              daily_room_url: url,
+              room_created_at: new Date().toISOString(),
+            }).eq('id', appt.id)
+          )
+          .then(() => fetchData())
+          .catch(() => { /* silently skip */ })
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appointments, slots])
+
+  async function handleStartVideo(appt: Appointment, slot: AvailabilitySlot) {
+    if (!profile) return
+    setJoiningVideo(true)
+    setVideoError(null)
+    try {
+      let roomName = appt.daily_room_name
+      let roomUrl  = appt.daily_room_url
+
+      if (!roomUrl) {
+        const room = await createDailyRoom(appt.id)
+        roomName = room.name
+        roomUrl  = room.url
+        await supabase.from('appointments').update({
+          daily_room_name: roomName,
+          daily_room_url:  roomUrl,
+          room_created_at: new Date().toISOString(),
+        }).eq('id', appt.id)
+      }
+
+      const token = await createDailyToken(roomName!, true)
+      setVideoAppt({ ...appt, daily_room_url: roomUrl, daily_room_name: roomName, slot })
+      setVideoToken(token)
+      setDetailSlot(null)
+    } catch (err) {
+      setVideoError(err instanceof Error ? err.message : 'No se pudo crear la sala de video. Intenta de nuevo.')
+    }
+    setJoiningVideo(false)
+  }
 
   async function handleAddSlots(e: React.FormEvent) {
     e.preventDefault()
@@ -222,6 +288,20 @@ export default function DoctorAgendaPage() {
     { label: 'Disponibles', value: slots.filter((s) => !s.is_booked).length, icon: '✅' },
     { label: 'Reservados', value: slots.filter((s) => s.is_booked).length, icon: '👤' },
   ]
+
+  // Full-screen video call
+  if (videoAppt && videoToken && videoAppt.daily_room_url && profile) {
+    return (
+      <DoctorVideoCall
+        roomUrl={videoAppt.daily_room_url}
+        token={videoToken}
+        appointmentId={videoAppt.id}
+        doctorId={profile.id}
+        onComplete={() => { setVideoAppt(null); setVideoToken(null); fetchData() }}
+        onLeave={() => { setVideoAppt(null); setVideoToken(null) }}
+      />
+    )
+  }
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -555,6 +635,42 @@ export default function DoctorAgendaPage() {
                   {completeError && (
                     <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">{completeError}</div>
                   )}
+
+                  {/* Video consultation button */}
+                  {(() => {
+                    const mins = minutesUntil(detailSlot.date, detailSlot.start_time)
+                    const canJoin = mins <= 5 && mins > -60
+                    return (
+                      <div className="pt-2 border-t border-slate-100 space-y-2">
+                        <button
+                          onClick={() => appt && handleStartVideo(appt, detailSlot)}
+                          disabled={!canJoin || joiningVideo || completing}
+                          title={
+                            !canJoin && mins > 5
+                              ? `La consulta comenzará en ${Math.ceil(mins)} minutos`
+                              : undefined
+                          }
+                          className={`w-full py-2.5 rounded-xl text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${
+                            canJoin
+                              ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm shadow-blue-100'
+                              : 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
+                          }`}
+                        >
+                          📹
+                          {joiningVideo
+                            ? 'Conectando...'
+                            : canJoin
+                            ? 'Iniciar consulta'
+                            : mins > 5
+                            ? `Disponible en ${Math.ceil(mins)} min`
+                            : 'Consulta finalizada'}
+                        </button>
+                        {videoError && (
+                          <p className="text-xs text-red-600 text-center">{videoError}</p>
+                        )}
+                      </div>
+                    )
+                  })()}
 
                   <div className="flex gap-3">
                     <button onClick={() => setDetailSlot(null)}

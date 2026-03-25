@@ -3,7 +3,9 @@ import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import NavBar from '../../components/NavBar'
 import MiniCalendar from '../../components/MiniCalendar'
+import PatientVideoCall from '../../components/PatientVideoCall'
 import { specialtyLabel } from '../../lib/types'
+import { createDailyRoom, createDailyToken } from '../../services/dailyService'
 import type { Appointment } from '../../lib/types'
 
 function formatDate(d: string) {
@@ -11,6 +13,12 @@ function formatDate(d: string) {
   return `${day}/${m}/${y}`
 }
 function formatTime(t: string) { return t.slice(0, 5) }
+
+/** Returns minutes until slot starts (negative = already started) */
+function minutesUntil(slotDate: string, slotStartTime: string): number {
+  const slotMs = new Date(`${slotDate}T${slotStartTime}`).getTime()
+  return (slotMs - Date.now()) / 60000
+}
 
 export default function PatientCalendarioPage() {
   const { profile } = useAuth()
@@ -23,11 +31,17 @@ export default function PatientCalendarioPage() {
   const [month, setMonth] = useState(today.getMonth())
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
 
-  // Modal
-  const [modalAppt, setModalAppt]       = useState<Appointment | null>(null)
+  // Appointment modal
+  const [modalAppt, setModalAppt]         = useState<Appointment | null>(null)
   const [confirmCancel, setConfirmCancel] = useState(false)
   const [cancelling, setCancelling]       = useState(false)
   const [cancelError, setCancelError]     = useState<string | null>(null)
+
+  // Video call
+  const [videoAppt,    setVideoAppt]    = useState<Appointment | null>(null)
+  const [videoToken,   setVideoToken]   = useState<string | null>(null)
+  const [joiningVideo, setJoiningVideo] = useState(false)
+  const [videoError,   setVideoError]   = useState<string | null>(null)
 
   const fetchAppointments = useCallback(async () => {
     if (!profile) return
@@ -46,11 +60,40 @@ export default function PatientCalendarioPage() {
 
   useEffect(() => { fetchAppointments() }, [fetchAppointments])
 
+  // Auto-create Daily rooms for appointments within 10 minutes
+  useEffect(() => {
+    if (appointments.length === 0) return
+    for (const appt of appointments) {
+      if (!appt.slot || appt.daily_room_url) continue
+      const mins = minutesUntil(appt.slot.date, appt.slot.start_time)
+      if (mins <= 10 && mins > -60) {
+        createDailyRoom(appt.id)
+          .then(({ name, url }) =>
+            supabase.from('appointments').update({
+              daily_room_name: name,
+              daily_room_url: url,
+              room_created_at: new Date().toISOString(),
+            }).eq('id', appt.id)
+          )
+          .then(() => {
+            setAppointments((prev) =>
+              prev.map((a) =>
+                a.id === appt.id
+                  ? { ...a, daily_room_name: `consulta-${appt.id}`, daily_room_url: appt.daily_room_url ?? '' }
+                  : a
+              )
+            )
+            fetchAppointments()
+          })
+          .catch(() => { /* silently skip */ })
+      }
+    }
+  }, [appointments, fetchAppointments])
+
   async function handleCancel() {
     if (!modalAppt) return
     setCancelling(true)
     setCancelError(null)
-    // Trigger on_appointment_cancelled sets is_booked = false automatically
     const { error: err } = await supabase
       .from('appointments')
       .update({ status: 'cancelled' })
@@ -66,19 +109,59 @@ export default function PatientCalendarioPage() {
     setCancelling(false)
   }
 
+  async function handleJoinVideo(appt: Appointment) {
+    if (!appt.slot) return
+    setJoiningVideo(true)
+    setVideoError(null)
+    try {
+      let roomName = appt.daily_room_name
+      let roomUrl  = appt.daily_room_url
+
+      if (!roomUrl) {
+        const room = await createDailyRoom(appt.id)
+        roomName = room.name
+        roomUrl  = room.url
+        await supabase.from('appointments').update({
+          daily_room_name: roomName,
+          daily_room_url:  roomUrl,
+          room_created_at: new Date().toISOString(),
+        }).eq('id', appt.id)
+      }
+
+      const token = await createDailyToken(roomName!, false)
+      setVideoAppt({ ...appt, daily_room_url: roomUrl, daily_room_name: roomName })
+      setVideoToken(token)
+      setModalAppt(null)
+    } catch (err) {
+      setVideoError(err instanceof Error ? err.message : 'No se pudo crear la sala de video. Intenta de nuevo.')
+    }
+    setJoiningVideo(false)
+  }
+
   function openModal(appt: Appointment) {
     setModalAppt(appt)
     setConfirmCancel(false)
     setCancelError(null)
+    setVideoError(null)
   }
 
-  // Build dot map
   const dotMap: Record<string, 'booked'> = {}
   appointments.forEach((a) => { if (a.slot?.date) dotMap[a.slot.date] = 'booked' })
 
   const dayAppointments = selectedDate
     ? appointments.filter((a) => a.slot?.date === selectedDate)
     : []
+
+  // If in a video call, render the video call full screen
+  if (videoAppt && videoToken && videoAppt.daily_room_url) {
+    return (
+      <PatientVideoCall
+        roomUrl={videoAppt.daily_room_url}
+        token={videoToken}
+        onLeave={() => { setVideoAppt(null); setVideoToken(null); fetchAppointments() }}
+      />
+    )
+  }
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -142,28 +225,64 @@ export default function PatientCalendarioPage() {
                   <p className="text-slate-500 text-sm py-4">No tienes citas este día.</p>
                 ) : (
                   <ul className="space-y-3">
-                    {dayAppointments.map((appt) => (
-                      <li key={appt.id}>
-                        <button
-                          onClick={() => openModal(appt)}
-                          className="w-full text-left p-4 rounded-xl border bg-emerald-50/60 border-emerald-200 hover:border-emerald-300 transition-colors"
-                        >
-                          <div className="flex flex-col gap-1">
-                            <p className="text-sm font-semibold text-slate-900">
-                              Dr(a). {appt.doctor?.full_name ?? '—'}
-                            </p>
-                            {appt.slot && (
-                              <p className="text-xs text-slate-500">
-                                {formatTime(appt.slot.start_time)} – {formatTime(appt.slot.end_time)}
-                              </p>
-                            )}
-                            <p className="text-xs text-slate-400">
-                              {specialtyLabel(appt.doctor?.specialty)}
-                            </p>
+                    {dayAppointments.map((appt) => {
+                      const mins = appt.slot ? minutesUntil(appt.slot.date, appt.slot.start_time) : Infinity
+                      const canJoin = mins <= 5 && mins > -60
+                      return (
+                        <li key={appt.id}>
+                          <div className="p-4 rounded-xl border bg-emerald-50/60 border-emerald-200 space-y-3">
+                            <button
+                              onClick={() => openModal(appt)}
+                              className="w-full text-left"
+                            >
+                              <div className="flex flex-col gap-1">
+                                <p className="text-sm font-semibold text-slate-900">
+                                  Dr(a). {appt.doctor?.full_name ?? '—'}
+                                </p>
+                                {appt.slot && (
+                                  <p className="text-xs text-slate-500">
+                                    {formatTime(appt.slot.start_time)} – {formatTime(appt.slot.end_time)}
+                                  </p>
+                                )}
+                                <p className="text-xs text-slate-400">
+                                  {specialtyLabel(appt.doctor?.specialty)}
+                                </p>
+                              </div>
+                            </button>
+
+                            {/* Join video button */}
+                            <div className="pt-1 border-t border-emerald-200">
+                              <button
+                                onClick={() => handleJoinVideo(appt)}
+                                disabled={!canJoin || joiningVideo}
+                                title={
+                                  !canJoin && mins > 5
+                                    ? `La consulta comenzará en ${Math.ceil(mins)} minutos`
+                                    : undefined
+                                }
+                                className={`w-full py-2 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${
+                                  canJoin
+                                    ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm'
+                                    : 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
+                                }`}
+                              >
+                                📹
+                                {joiningVideo
+                                  ? 'Conectando...'
+                                  : canJoin
+                                  ? 'Unirse a la consulta'
+                                  : mins > 5
+                                  ? `Disponible en ${Math.ceil(mins)} min`
+                                  : 'Consulta finalizada'}
+                              </button>
+                              {videoError && (
+                                <p className="text-xs text-red-600 mt-1.5 text-center">{videoError}</p>
+                              )}
+                            </div>
                           </div>
-                        </button>
-                      </li>
-                    ))}
+                        </li>
+                      )
+                    })}
                   </ul>
                 )}
               </div>
