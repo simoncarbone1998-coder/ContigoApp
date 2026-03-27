@@ -45,7 +45,7 @@ export default function PatientPerfilPage() {
     setLoadingH(true)
     const { data } = await supabase
       .from('appointments')
-      .select('*, doctor:doctor_id(id, full_name, email, specialty, avatar_url), slot:slot_id(*)')
+      .select('*, doctor:doctor_id(id, full_name, email, specialty, avatar_url), slot:slot_id(*), prescriptions(id, prescription_items(medicine_name, dose, instructions))')
       .eq('patient_id', profile.id)
       .eq('completed', true)
       .eq('status', 'confirmed')
@@ -277,6 +277,26 @@ export default function PatientPerfilPage() {
                   {selected.summary ?? 'El médico no escribió una conclusión.'}
                 </p>
               </div>
+
+              {/* Medications from prescription */}
+              {(() => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const items = (selected as any).prescriptions?.[0]?.prescription_items ?? []
+                if (items.length === 0) return null
+                return (
+                  <div>
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Medicamentos recetados</p>
+                    <div className="space-y-2">
+                      {items.map((item: { medicine_name: string; dose: string; instructions: string }, i: number) => (
+                        <div key={i} className="p-3 bg-blue-50 border border-blue-100 rounded-xl">
+                          <p className="text-sm font-semibold text-slate-900">{item.medicine_name}</p>
+                          <p className="text-xs text-slate-600 mt-0.5">{item.dose} · {item.instructions}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })()}
             </div>
 
             <button onClick={() => setSelected(null)}

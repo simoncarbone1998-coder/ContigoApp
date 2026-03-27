@@ -1,36 +1,60 @@
 import { useEffect, useRef, useState } from 'react'
 import Daily from '@daily-co/daily-js'
 import { supabase } from '../lib/supabase'
+import { createTranscriptionSession } from '../services/deepgramService'
 
 interface Props {
   roomUrl: string
   token: string
   appointmentId: string
   doctorId: string
+  patientId: string
   onComplete: () => void
   onLeave: () => void
 }
 
-type TranscriptLine = { speaker: 'Doctor' | 'Paciente'; text: string }
+type Phase = 'calling' | 'processing' | 'review' | 'done'
+type MedRow = { medicine_name: string; dose: string; instructions: string }
+const emptyMed = (): MedRow => ({ medicine_name: '', dose: '', instructions: '' })
 
-export default function DoctorVideoCall({ roomUrl, token, appointmentId, doctorId, onComplete, onLeave }: Props) {
-  const callRef        = useRef<ReturnType<typeof Daily.createCallObject> | null>(null)
-  const initialized    = useRef(false)
+export default function DoctorVideoCall({
+  roomUrl, token, appointmentId, doctorId, patientId, onComplete, onLeave,
+}: Props) {
+  // Daily.co
+  const callRef       = useRef<ReturnType<typeof Daily.createCallObject> | null>(null)
+  const initialized   = useRef(false)
   const localVideoRef  = useRef<HTMLVideoElement>(null)
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
   const remoteAudioRef = useRef<HTMLAudioElement>(null)
-  const localSessionId = useRef<string | null>(null)
+  const localMicRef    = useRef<MediaStream | null>(null)
 
+  // Deepgram session
+  const sessionRef = useRef(createTranscriptionSession())
+
+  // Call state
+  const [phase,  setPhase]  = useState<Phase>('calling')
   const [muted,  setMuted]  = useState(false)
   const [camOff, setCamOff] = useState(false)
   const [error,  setError]  = useState<string | null>(null)
 
-  const [transcriptText, setTranscriptText] = useState('')
-  const [summary,        setSummary]        = useState('')
-  const [saving,  setSaving]  = useState(false)
-  const [saved,   setSaved]   = useState(false)
+  // Transcript display
+  const [transcript, setTranscript] = useState('')
+  const transcriptRef = useRef<HTMLDivElement>(null)
+
+  // Review form
+  const [summary,   setSummary]   = useState('')
+  const [meds,      setMeds]      = useState<MedRow[]>([emptyMed()])
+  const [noMeds,    setNoMeds]    = useState(false)
+  const [aiError,   setAiError]   = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
-  const [showLeaveWarning, setShowLeaveWarning] = useState(false)
+  const [saving,    setSaving]    = useState(false)
+
+  // Auto-scroll transcript
+  useEffect(() => {
+    if (transcriptRef.current) {
+      transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight
+    }
+  }, [transcript])
 
   useEffect(() => {
     if (initialized.current) return
@@ -42,17 +66,14 @@ export default function DoctorVideoCall({ roomUrl, token, appointmentId, doctorI
     const call = Daily.createCallObject()
     callRef.current = call
 
-    call.on('joined-meeting', (ev) => {
-      if (ev?.participants?.local) {
-        localSessionId.current = ev.participants.local.session_id
-      }
-    })
+    const session = sessionRef.current
 
     call.on('participant-updated', (ev) => {
       if (!ev) return
       const p = ev.participant
       const videoTrack = p.tracks.video?.persistentTrack
       const audioTrack = p.tracks.audio?.persistentTrack
+
       if (p.local) {
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = videoTrack ? new MediaStream([videoTrack]) : null
@@ -64,227 +85,356 @@ export default function DoctorVideoCall({ roomUrl, token, appointmentId, doctorI
         if (remoteAudioRef.current) {
           remoteAudioRef.current.srcObject = audioTrack ? new MediaStream([audioTrack]) : null
         }
+        // Add remote audio to transcription when it becomes available
+        if (audioTrack) {
+          session.addRemote(new MediaStream([audioTrack]), setTranscript)
+        }
       }
     })
 
-    // Transcription — graceful fallback if plan doesn't support it
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      call.on('transcription-message' as any, (ev: any) => {
-        if (!ev?.text) return
-        const isLocal = ev.participantId === localSessionId.current
-        const line: TranscriptLine = { speaker: isLocal ? 'Doctor' : 'Paciente', text: ev.text }
-        setTranscriptText((prev) => `${prev}${line.speaker}: ${line.text}\n`)
+    call.join({ url: roomUrl, token })
+      .then(async () => {
+        try {
+          const localMic = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+          localMicRef.current = localMic
+          session.startLocal(localMic, setTranscript)
+        } catch {
+          // Mic access for Deepgram failed — video call continues, no transcription
+        }
       })
-    } catch {
-      // Transcription unavailable — textarea stays empty for manual notes
-    }
-
-    call.join({ url: roomUrl, token }).catch(() => {
-      setError('Por favor permite el acceso a tu cámara y micrófono para iniciar la consulta.')
-    })
+      .catch(() => {
+        setError('Por favor permite el acceso a tu cámara y micrófono para iniciar la consulta.')
+      })
 
     return () => {
       initialized.current = false
-      call.leave().finally(() => { call.destroy() })
-      callRef.current = null
+      session.stop()
+      localMicRef.current?.getTracks().forEach((t) => t.stop())
+      if (callRef.current) {
+        callRef.current.leave().finally(() => { callRef.current?.destroy() })
+        callRef.current = null
+      }
     }
   }, [roomUrl, token])
 
-  function toggleMic() {
-    callRef.current?.setLocalAudio(muted)
-    setMuted(!muted)
-  }
-  function toggleCam() {
-    callRef.current?.setLocalVideo(camOff)
-    setCamOff(!camOff)
-  }
-
-  function tryLeave() {
-    if (!summary.trim()) {
-      setShowLeaveWarning(true)
-    } else {
-      callRef.current?.leave()
-      onLeave()
+  async function handleEndCall() {
+    // Stop Daily call
+    if (callRef.current) {
+      callRef.current.leave()
+      callRef.current.destroy()
+      callRef.current = null
     }
+
+    // Stop Deepgram
+    const session = sessionRef.current
+    session.stop()
+    localMicRef.current?.getTracks().forEach((t) => t.stop())
+
+    const fullTranscript = session.getTranscript() || transcript
+    setPhase('processing')
+
+    // Generate AI summary via Edge Function
+    try {
+      const { data, error: fnErr } = await supabase.functions.invoke('claude-summary', {
+        body: { transcript: fullTranscript },
+      })
+
+      if (!fnErr && data && !data.error) {
+        setSummary(data.resumen ?? '')
+        const meds = data.medicamentos ?? []
+        if (meds.length > 0) {
+          setMeds(meds)
+          setNoMeds(false)
+        } else {
+          setMeds([emptyMed()])
+          setNoMeds(true)
+        }
+      } else {
+        setAiError('No se pudo generar el resumen automático. Por favor completa los campos manualmente.')
+      }
+    } catch {
+      setAiError('No se pudo generar el resumen automático. Por favor completa los campos manualmente.')
+    }
+
+    setPhase('review')
   }
 
   async function handleSaveAndComplete() {
     if (!summary.trim()) {
-      setSaveError('El resumen final es obligatorio antes de guardar.')
+      setSaveError('El resumen de la consulta es obligatorio.')
       return
     }
+    if (!noMeds && meds.some((m) => !m.medicine_name.trim() || !m.dose.trim() || !m.instructions.trim())) {
+      setSaveError('Completa todos los campos de los medicamentos o marca "No recetar".')
+      return
+    }
+
     setSaving(true)
     setSaveError(null)
 
+    // 1. Mark appointment completed + save summary
     const { error: apptErr } = await supabase
       .from('appointments')
-      .update({
-        completed: true,
-        completed_at: new Date().toISOString(),
-        summary: summary.trim(),
-      })
+      .update({ completed: true, completed_at: new Date().toISOString(), summary: summary.trim() })
       .eq('id', appointmentId)
 
-    if (apptErr) {
-      setSaveError('No se pudo completar la cita. Intenta de nuevo.')
-      setSaving(false)
-      return
+    if (apptErr) { setSaveError('No se pudo completar la cita.'); setSaving(false); return }
+
+    // 2. Create prescription + items if medications
+    if (!noMeds && meds.length > 0) {
+      const { data: prescData, error: prescErr } = await supabase
+        .from('prescriptions')
+        .insert({ appointment_id: appointmentId, patient_id: patientId, doctor_id: doctorId, status: 'pendiente' })
+        .select('id')
+        .single()
+
+      if (!prescErr && prescData) {
+        await supabase.from('prescription_items').insert(
+          meds.map((m) => ({
+            prescription_id: prescData.id,
+            medicine_name:   m.medicine_name.trim(),
+            dose:            m.dose.trim(),
+            instructions:    m.instructions.trim(),
+          }))
+        )
+      }
     }
 
+    // 3. Doctor earnings
     await supabase
       .from('doctor_earnings')
       .insert({ doctor_id: doctorId, appointment_id: appointmentId, amount: 10 })
 
     setSaving(false)
-    setSaved(true)
-    setTimeout(() => {
-      callRef.current?.leave()
-      onComplete()
-    }, 1500)
+    setPhase('done')
+    setTimeout(onComplete, 1500)
   }
 
+  function toggleMic() { callRef.current?.setLocalAudio(muted); setMuted(!muted) }
+  function toggleCam() { callRef.current?.setLocalVideo(camOff); setCamOff(!camOff) }
+
+  // ── Processing spinner ──
+  if (phase === 'processing') {
+    return (
+      <div className="fixed inset-0 z-50 bg-white flex flex-col items-center justify-center gap-4">
+        <div className="w-12 h-12 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin" />
+        <p className="text-slate-700 font-semibold text-base">✨ Generando resumen con IA...</p>
+        <p className="text-slate-400 text-sm">Analizando la transcripción de la consulta</p>
+      </div>
+    )
+  }
+
+  // ── Review form ──
+  if (phase === 'review' || phase === 'done') {
+    return (
+      <div className="fixed inset-0 z-50 bg-slate-50 overflow-y-auto">
+        <div className="max-w-2xl mx-auto px-4 py-8 space-y-6">
+          <div>
+            <h1 className="text-xl font-bold text-slate-900">Revisión de consulta</h1>
+            <p className="text-sm text-slate-500 mt-1">
+              {aiError
+                ? 'Completa los campos manualmente para finalizar la cita.'
+                : 'Revisa y edita el resumen generado por IA antes de guardar.'}
+            </p>
+          </div>
+
+          {phase === 'done' && (
+            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 font-semibold text-sm">
+              ✅ Consulta completada y guardada
+            </div>
+          )}
+
+          {aiError && (
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-sm">
+              {aiError}
+            </div>
+          )}
+
+          {/* Transcript (collapsed, for reference) */}
+          {transcript && (
+            <details className="bg-white border border-slate-200 rounded-xl">
+              <summary className="px-4 py-3 text-sm font-semibold text-slate-600 cursor-pointer select-none">
+                📝 Ver transcripción completa
+              </summary>
+              <div className="px-4 pb-4">
+                <pre className="text-xs text-slate-600 whitespace-pre-wrap leading-relaxed font-sans max-h-40 overflow-y-auto">
+                  {transcript}
+                </pre>
+              </div>
+            </details>
+          )}
+
+          {/* Summary */}
+          <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-3">
+            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide">
+              Resumen de la consulta <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              value={summary}
+              onChange={(e) => setSummary(e.target.value)}
+              rows={4}
+              placeholder="Describe el motivo de consulta y lo discutido..."
+              className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors resize-none"
+            />
+          </div>
+
+          {/* Medications */}
+          <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Medicamentos recetados</p>
+
+            {!noMeds && (
+              <div className="space-y-3">
+                {meds.map((med, i) => (
+                  <div key={i} className="relative p-3 bg-slate-50 rounded-xl border border-slate-200">
+                    {meds.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => setMeds((m) => m.filter((_, j) => j !== i))}
+                        className="absolute top-2 right-2 w-5 h-5 rounded-full bg-slate-200 hover:bg-red-100 text-slate-500 hover:text-red-600 flex items-center justify-center text-xs font-bold transition-colors"
+                        aria-label="Eliminar"
+                      >×</button>
+                    )}
+                    <input
+                      type="text"
+                      value={med.medicine_name}
+                      onChange={(e) => setMeds((m) => m.map((x, j) => j === i ? { ...x, medicine_name: e.target.value } : x))}
+                      placeholder="Nombre del medicamento"
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 mb-2 bg-white"
+                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        value={med.dose}
+                        onChange={(e) => setMeds((m) => m.map((x, j) => j === i ? { ...x, dose: e.target.value } : x))}
+                        placeholder="Dosis (ej: 500mg)"
+                        className="border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 bg-white"
+                      />
+                      <input
+                        type="text"
+                        value={med.instructions}
+                        onChange={(e) => setMeds((m) => m.map((x, j) => j === i ? { ...x, instructions: e.target.value } : x))}
+                        placeholder="ej: 1 pastilla cada 8 horas"
+                        className="border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 bg-white"
+                      />
+                    </div>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setMeds((m) => [...m, emptyMed()])}
+                  className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 font-semibold transition-colors"
+                >
+                  <span className="text-lg leading-none">+</span> Agregar medicamento
+                </button>
+              </div>
+            )}
+
+            <label className="flex items-center gap-2.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={noMeds}
+                onChange={(e) => setNoMeds(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-300 accent-blue-600"
+              />
+              <span className="text-sm text-slate-600">No recetar medicamentos en esta cita</span>
+            </label>
+          </div>
+
+          {saveError && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">{saveError}</div>
+          )}
+
+          <div className="flex gap-3 pb-4">
+            <button
+              onClick={onLeave}
+              disabled={saving || phase === 'done'}
+              className="flex-1 py-3 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50"
+            >
+              Salir sin completar
+            </button>
+            <button
+              onClick={handleSaveAndComplete}
+              disabled={saving || phase === 'done' || !summary.trim()}
+              className="flex-1 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-colors disabled:opacity-50 shadow-sm"
+            >
+              {saving ? 'Guardando...' : phase === 'done' ? '✅ Guardado' : 'Guardar y completar ✓'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Calling phase ──
   return (
     <div className="fixed inset-0 z-50 bg-[#0f172a] flex flex-col md:flex-row">
       <audio ref={remoteAudioRef} autoPlay playsInline className="hidden" />
 
+      {error && (
+        <div className="absolute top-4 left-4 right-4 md:right-auto md:max-w-sm bg-red-600 text-white text-sm px-5 py-3 rounded-xl shadow-lg z-10 text-center">
+          {error}
+        </div>
+      )}
+
       {/* ── Left: Video ── */}
       <div className="flex-1 flex flex-col min-h-0">
-        {error && (
-          <div className="absolute top-4 left-4 right-4 md:right-auto md:w-96 bg-red-600 text-white text-sm px-5 py-3 rounded-xl shadow-lg z-10 text-center">
-            {error}
-          </div>
-        )}
-        {saved && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-emerald-600 text-white text-sm px-5 py-3 rounded-xl shadow-lg z-10 whitespace-nowrap">
-            ✅ Consulta completada y guardada
-          </div>
-        )}
-
-        {/* Remote video — large */}
         <div className="flex-1 relative p-3 pb-0">
-          <video
-            ref={remoteVideoRef} autoPlay playsInline
-            className="w-full h-full object-cover rounded-2xl bg-slate-800"
-          />
-          {/* Local — corner */}
-          <video
-            ref={localVideoRef} autoPlay playsInline muted
-            className="absolute bottom-3 right-5 w-28 h-20 object-cover rounded-xl border-2 border-slate-600 bg-slate-700"
-          />
+          <video ref={remoteVideoRef} autoPlay playsInline
+            className="w-full h-full object-cover rounded-2xl bg-slate-800" />
+          <video ref={localVideoRef} autoPlay playsInline muted
+            className="absolute bottom-3 right-5 w-28 h-20 object-cover rounded-xl border-2 border-slate-600 bg-slate-700" />
         </div>
 
         {/* Controls */}
-        <div className="flex items-center justify-center gap-4 py-4 bg-[#0f172a]">
+        <div className="flex items-center justify-center gap-4 py-4">
+          <CtrlBtn onClick={toggleMic} active={muted} label={muted ? 'Act.' : 'Silenc.'} icon="🎤" />
+          <CtrlBtn onClick={toggleCam} active={camOff} label={camOff ? 'Act.' : 'Cámara'} icon="📷" />
           <button
-            onClick={toggleMic}
-            title={muted ? 'Activar micrófono' : 'Silenciar'}
-            className={`w-12 h-12 rounded-full flex flex-col items-center justify-center gap-0.5 text-xs font-medium transition-colors ${
-              muted ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-slate-700 hover:bg-slate-600 text-slate-200'
-            }`}
-          >
-            <span className="text-base leading-none">🎤</span>
-            <span>{muted ? 'Act.' : 'Silenc.'}</span>
-          </button>
-
-          <button
-            onClick={toggleCam}
-            title={camOff ? 'Activar cámara' : 'Apagar cámara'}
-            className={`w-12 h-12 rounded-full flex flex-col items-center justify-center gap-0.5 text-xs font-medium transition-colors ${
-              camOff ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-slate-700 hover:bg-slate-600 text-slate-200'
-            }`}
-          >
-            <span className="text-base leading-none">📷</span>
-            <span>{camOff ? 'Act.' : 'Cámara'}</span>
-          </button>
-
-          <button
-            onClick={tryLeave}
-            title="Terminar llamada"
+            onClick={handleEndCall}
             className="w-12 h-12 rounded-full bg-red-600 hover:bg-red-700 flex flex-col items-center justify-center gap-0.5 text-xs font-medium text-white transition-colors"
+            title="Terminar llamada"
           >
             <span className="text-base leading-none">📵</span>
-            <span>Salir</span>
+            <span>Fin</span>
           </button>
         </div>
       </div>
 
-      {/* ── Right: Notes panel ── */}
-      <div className="w-full md:w-[380px] bg-white flex flex-col overflow-hidden border-t md:border-t-0 md:border-l border-slate-200 max-h-[55vh] md:max-h-none">
-        <div className="px-5 py-4 border-b border-slate-100 shrink-0">
-          <h2 className="text-sm font-bold text-slate-900">📝 Notas de consulta</h2>
+      {/* ── Right: Transcript panel ── */}
+      <div className="w-full md:w-[340px] bg-white flex flex-col overflow-hidden border-t md:border-t-0 md:border-l border-slate-200 max-h-[40vh] md:max-h-none">
+        <div className="px-4 py-3 border-b border-slate-100 shrink-0 flex items-center justify-between">
+          <h2 className="text-sm font-bold text-slate-900">📝 Transcripción en vivo</h2>
+          <span className="flex items-center gap-1.5 text-xs font-semibold text-red-500">
+            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+            Grabando
+          </span>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-5 space-y-5">
-          {/* Live transcription */}
-          <div>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
-              Transcripción en vivo
-            </p>
-            <textarea
-              value={transcriptText}
-              onChange={(e) => setTranscriptText(e.target.value)}
-              rows={8}
-              placeholder="Escribe tus notas aquí..."
-              className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors resize-none"
-            />
-          </div>
-
-          {/* Final summary */}
-          <div className="border-t border-slate-100 pt-4">
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
-              Resumen final <span className="text-red-500">*</span>
-            </p>
-            <textarea
-              value={summary}
-              onChange={(e) => setSummary(e.target.value)}
-              rows={5}
-              placeholder="Escribe el resumen de la consulta..."
-              className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors resize-none"
-            />
-          </div>
-
-          {saveError && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
-              {saveError}
-            </div>
+        <div
+          ref={transcriptRef}
+          className="flex-1 overflow-y-auto p-4 text-sm text-slate-700 leading-relaxed font-mono whitespace-pre-wrap"
+        >
+          {transcript || (
+            <span className="text-slate-400 not-italic font-sans text-xs">
+              La transcripción aparecerá aquí mientras hablan...
+            </span>
           )}
-
-          <button
-            onClick={handleSaveAndComplete}
-            disabled={saving || saved || !summary.trim()}
-            className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-colors disabled:opacity-50 shadow-sm"
-          >
-            {saving ? 'Guardando...' : saved ? '✅ Guardado' : 'Guardar y completar ✓'}
-          </button>
         </div>
       </div>
-
-      {/* Leave without saving warning */}
-      {showLeaveWarning && (
-        <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-10 px-4">
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl">
-            <h3 className="text-base font-bold text-slate-900 mb-2">¿Salir sin guardar?</h3>
-            <p className="text-sm text-slate-500 mb-5">
-              El resumen no ha sido guardado. ¿Seguro que quieres terminar la llamada?
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowLeaveWarning(false)}
-                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
-              >
-                Volver
-              </button>
-              <button
-                onClick={() => { callRef.current?.leave(); onLeave() }}
-                className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition-colors"
-              >
-                Sí, salir
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
+  )
+}
+
+function CtrlBtn({ onClick, active, label, icon }: { onClick: () => void; active: boolean; label: string; icon: string }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`w-12 h-12 rounded-full flex flex-col items-center justify-center gap-0.5 text-xs font-medium transition-colors ${
+        active ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-slate-700 hover:bg-slate-600 text-slate-200'
+      }`}
+    >
+      <span className="text-base leading-none">{icon}</span>
+      <span>{label}</span>
+    </button>
   )
 }

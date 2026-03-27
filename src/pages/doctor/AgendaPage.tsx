@@ -297,6 +297,7 @@ export default function DoctorAgendaPage() {
         token={videoToken}
         appointmentId={videoAppt.id}
         doctorId={profile.id}
+        patientId={videoAppt.patient_id}
         onComplete={() => { setVideoAppt(null); setVideoToken(null); fetchData() }}
         onLeave={() => { setVideoAppt(null); setVideoToken(null) }}
       />
