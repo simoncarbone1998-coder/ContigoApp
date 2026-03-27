@@ -6,6 +6,124 @@ import MiniCalendar from '../../components/MiniCalendar'
 import { SPECIALTIES, specialtyLabel } from '../../lib/types'
 import type { AvailabilitySlot, Specialty } from '../../lib/types'
 
+// ── Email helpers ───────────────────────────────────────────────────────────
+
+function fmtDate(d: string) { const [y, m, day] = d.split('-'); return `${day}/${m}/${y}` }
+function fmtTime(t: string) { return t.slice(0, 5) }
+
+function emailWrapper(content: string) {
+  return `<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;">
+    <tr><td align="center" style="padding:32px 16px;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;">
+        <tr><td style="background:#1e3a5f;border-radius:16px 16px 0 0;padding:28px 32px;">
+          <p style="margin:0;color:#fff;font-size:24px;font-weight:700;">contigo</p>
+          <p style="margin:4px 0 0;color:#93c5fd;font-size:13px;">Plataforma de Salud · Colombia</p>
+        </td></tr>
+        <tr><td style="background:#fff;padding:32px;">${content}</td></tr>
+        <tr><td style="background:#f8fafc;border-radius:0 0 16px 16px;padding:20px 32px;text-align:center;border-top:1px solid #e2e8f0;">
+          <p style="margin:0;color:#94a3b8;font-size:12px;">© 2026 Contigo &nbsp;·&nbsp; <a href="https://contigomedicina.com" style="color:#94a3b8;text-decoration:none;">contigomedicina.com</a></p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`
+}
+
+function apptCard(rows: { icon: string; label: string; value: string }[]) {
+  const trs = rows.map(({ icon, label, value }) => `
+    <tr>
+      <td style="padding:10px 0;border-bottom:1px solid #f1f5f9;color:#64748b;font-size:14px;">${icon} ${label}</td>
+      <td style="padding:10px 0;border-bottom:1px solid #f1f5f9;text-align:right;color:#0f172a;font-size:14px;font-weight:600;">${value}</td>
+    </tr>`).join('')
+  return `<table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border-radius:12px;padding:4px 20px;margin:20px 0;border:1px solid #e2e8f0;">${trs}</table>`
+}
+
+function confirmationPatientHtml(opts: {
+  patientName: string; doctorName: string; specialty: string
+  fecha: string; hora: string; reason: string | null
+}) {
+  const card = apptCard([
+    { icon: '📅', label: 'Fecha',              value: opts.fecha },
+    { icon: '⏰', label: 'Hora',               value: opts.hora },
+    { icon: '👨‍⚕️', label: 'Doctor',            value: `Dr(a). ${opts.doctorName}` },
+    { icon: '🏥', label: 'Especialidad',        value: opts.specialty },
+    { icon: '📝', label: 'Motivo',             value: opts.reason || 'No especificado' },
+  ])
+  return emailWrapper(`
+    <p style="margin:0 0 6px;color:#16a34a;font-size:22px;font-weight:700;">✅ Cita confirmada</p>
+    <p style="margin:0 0 24px;color:#64748b;font-size:15px;">Hola ${opts.patientName},</p>
+    <p style="margin:0 0 4px;color:#334155;font-size:15px;line-height:1.6;">Tu cita ha sido confirmada exitosamente.</p>
+    ${card}
+    <p style="margin:16px 0 4px;color:#334155;font-size:14px;line-height:1.6;">
+      Tu consulta será por <strong>videollamada</strong>. Recibirás un recordatorio 24 horas antes.<br>
+      Si necesitas cancelar, puedes hacerlo desde tu calendario:
+    </p>
+    <p style="margin:0 0 24px;">
+      <a href="https://contigomedicina.com/paciente/calendario" style="color:#1e3a5f;font-weight:600;font-size:14px;">contigomedicina.com/paciente/calendario</a>
+    </p>
+    <p style="margin:0;color:#94a3b8;font-size:13px;">El equipo de Contigo</p>
+  `)
+}
+
+function confirmationDoctorHtml(opts: {
+  doctorName: string; patientName: string; specialty: string
+  fecha: string; hora: string; reason: string | null
+}) {
+  const card = apptCard([
+    { icon: '📅', label: 'Fecha',              value: opts.fecha },
+    { icon: '⏰', label: 'Hora',               value: opts.hora },
+    { icon: '👤', label: 'Paciente',           value: opts.patientName },
+    { icon: '🏥', label: 'Especialidad',        value: opts.specialty },
+    { icon: '📝', label: 'Motivo de consulta', value: opts.reason || 'No especificado' },
+  ])
+  return emailWrapper(`
+    <p style="margin:0 0 6px;color:#1e3a5f;font-size:22px;font-weight:700;">📅 Nueva cita agendada</p>
+    <p style="margin:0 0 24px;color:#64748b;font-size:15px;">Hola Dr(a). ${opts.doctorName},</p>
+    <p style="margin:0 0 4px;color:#334155;font-size:15px;line-height:1.6;">Tienes una nueva cita agendada.</p>
+    ${card}
+    <p style="margin:16px 0 24px;">
+      <a href="https://contigomedicina.com/doctor/agenda" style="color:#1e3a5f;font-weight:600;font-size:14px;">Ver en tu agenda → contigomedicina.com/doctor/agenda</a>
+    </p>
+    <p style="margin:0;color:#94a3b8;font-size:13px;">El equipo de Contigo</p>
+  `)
+}
+
+async function sendConfirmationEmails(opts: {
+  patientEmail: string; patientName: string
+  doctorEmail: string | null | undefined; doctorName: string; specialty: string
+  fecha: string; hora: string; reason: string | null
+}) {
+  try {
+    const jobs: Promise<unknown>[] = []
+
+    jobs.push(supabase.functions.invoke('send-email', {
+      body: {
+        to: opts.patientEmail,
+        subject: '✅ Tu cita médica está confirmada — Contigo',
+        html: confirmationPatientHtml(opts),
+      },
+    }))
+
+    if (opts.doctorEmail) {
+      jobs.push(supabase.functions.invoke('send-email', {
+        body: {
+          to: opts.doctorEmail,
+          subject: `📅 Nueva cita agendada — ${opts.patientName}`,
+          html: confirmationDoctorHtml(opts),
+        },
+      }))
+    }
+
+    await Promise.all(jobs)
+  } catch (err) {
+    console.error('Confirmation email error (non-blocking):', err)
+  }
+}
+
 function formatDate(d: string) {
   const [y, m, day] = d.split('-')
   return `${day}/${m}/${y}`
@@ -110,6 +228,23 @@ export default function PatientAgendarPage() {
       setSuccess(
         `¡Cita confirmada con ${bookingSlot.doctor?.full_name ?? 'el doctor'} el ${formatDate(bookingSlot.date)} · ${formatTime(bookingSlot.start_time)}.`
       )
+
+      // Fire-and-forget confirmation emails (non-blocking)
+      if (profile.email) {
+        const fecha = fmtDate(bookingSlot.date)
+        const hora  = `${fmtTime(bookingSlot.start_time)} – ${fmtTime(bookingSlot.end_time)}`
+        sendConfirmationEmails({
+          patientEmail: profile.email,
+          patientName:  profile.full_name ?? 'Paciente',
+          doctorEmail:  bookingSlot.doctor?.email,
+          doctorName:   bookingSlot.doctor?.full_name ?? 'Doctor',
+          specialty:    specialtyLabel(bookingSlot.doctor?.specialty ?? selectedSpecialty as Specialty),
+          fecha,
+          hora,
+          reason: reason.trim() || null,
+        })
+      }
+
       setBookingSlot(null)
       setReason('')
       setSelectedDate(null)
