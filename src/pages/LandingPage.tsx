@@ -16,16 +16,16 @@ function useScrollAnimations() {
 }
 
 const NAV_LINKS = [
-  { label: 'Para Pacientes', id: 'para-pacientes' },
-  { label: 'Para Médicos',   id: 'para-medicos' },
-  { label: 'Cómo Funciona',  id: 'como-funciona' },
-  { label: 'Nosotros',       id: 'nosotros' },
+  { label: 'Beneficios',    id: 'para-pacientes' },
+  { label: 'Cómo Funciona', id: 'como-funciona' },
+  { label: 'Nosotros',      id: 'nosotros' },
 ]
 
 // ── Main component ────────────────────────────────────────────────────────────
 export default function LandingPage() {
   const [scrolled,   setScrolled]   = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [activeTab,  setActiveTab]  = useState<'patient' | 'doctor'>('patient')
 
   useScrollAnimations()
 
@@ -197,89 +197,99 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ══════════════════════════ PARA PACIENTES ══════════════════════════ */}
-      <section id="para-pacientes" className="bg-white py-28">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+      {/* ══════════════════════════ BENEFICIOS (toggle) ═════════════════════ */}
+      <section id="para-pacientes" className="bg-white py-24">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6">
 
-          <div className="text-center max-w-2xl mx-auto mb-24 fade-up">
-            <p className="text-xs font-bold uppercase tracking-widest text-blue-600 mb-3">Para Pacientes</p>
-            <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 leading-tight mb-4">
-              Todo lo que necesitas para cuidar tu salud
+          {/* Header */}
+          <div className="text-center mb-10 fade-up">
+            <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-3">Beneficios</p>
+            <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 mb-8">
+              Diseñado para ti
             </h2>
-            <p className="text-lg text-slate-500">
-              Diseñado para que tú tengas el control, sin filas ni burocracia.
-            </p>
-          </div>
 
-          {/* Alternating feature rows */}
-          <div className="space-y-28">
-
-            {/* 1 — icon left · text right */}
-            <div className="fade-up grid md:grid-cols-2 gap-12 lg:gap-24 items-center">
-              <div className="flex justify-center">
-                <IconCircle emoji="🕐" color="blue" />
-              </div>
-              <FeatureText
-                title="Cita médica en menos de 36 horas"
-                text="Olvídate de esperar semanas para ver a un médico. Con Contigo tienes un médico general o especialista disponible en menos de 36 horas — desde tu celular."
-                stat="vs. 36 días de espera promedio en el sistema actual"
-                statType="warning"
-              />
-            </div>
-
-            {/* 2 — text left · icon right */}
-            <div className="fade-up grid md:grid-cols-2 gap-12 lg:gap-24 items-center">
-              <FeatureText
-                title="Tus medicamentos llegan a tu puerta"
-                text="Después de tu consulta, tu médico receta digitalmente y tus medicamentos son enviados directamente a tu casa. Sin filas en dispensarios, sin desplazamientos."
-                stat="Cierra el ciclo completo de atención primaria"
-                statType="success"
-              />
-              <div className="flex justify-center md:order-last">
-                <IconCircle emoji="💊" color="green" />
-              </div>
-            </div>
-
-            {/* 3 — icon left · text right */}
-            <div className="fade-up grid md:grid-cols-2 gap-12 lg:gap-24 items-center">
-              <div className="flex justify-center">
-                <IconCircle emoji="📋" color="blue" />
-              </div>
-              <FeatureText
-                title="Tu historia médica, siempre contigo"
-                text="Cada consulta, diagnóstico y medicamento recetado queda guardado en tu perfil digital. Accede a tu historial completo en cualquier momento, desde cualquier lugar."
-                stat="100% digital — cero papeles, cero carpetas perdidas"
-                statType="success"
-              />
-            </div>
-
-            {/* 4 — text left · icon right */}
-            <div className="fade-up grid md:grid-cols-2 gap-12 lg:gap-24 items-center">
-              <FeatureText
-                title="Telemedicina cuando no necesitas salir"
-                text="La mayoría de consultas de atención primaria no requieren presencia física. Ahorra tiempo y dinero consultando desde casa cuando tu situación lo permite."
-                stat="La mayoría de consultas de atención primaria pueden resolverse por telemedicina"
-                statType="info"
-              />
-              <div className="flex justify-center md:order-last">
-                <IconCircle emoji="📱" color="green" />
-              </div>
+            {/* Toggle pill */}
+            <div className="inline-flex items-center bg-slate-100 rounded-xl p-1 gap-1">
+              <button
+                onClick={() => setActiveTab('patient')}
+                className="px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200"
+                style={activeTab === 'patient'
+                  ? { background: '#1e3a5f', color: '#fff' }
+                  : { background: 'transparent', color: '#64748b' }}
+              >
+                Soy paciente
+              </button>
+              <button
+                onClick={() => setActiveTab('doctor')}
+                className="px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200"
+                style={activeTab === 'doctor'
+                  ? { background: '#16a34a', color: '#fff' }
+                  : { background: 'transparent', color: '#64748b' }}
+              >
+                Soy médico
+              </button>
             </div>
           </div>
 
-          {/* Price CTA card */}
-          <div className="mt-28 fade-up flex justify-center">
-            <div className="w-full max-w-md text-center p-10 rounded-3xl border border-slate-100 shadow-xl bg-white">
-              <p className="text-sm font-semibold text-slate-400 uppercase tracking-widest mb-4">Todo esto por solo</p>
-              <p className="text-7xl font-extrabold text-blue-600 leading-none mb-1">$80.000</p>
-              <p className="text-xl font-semibold text-slate-600 mb-2">COP / mes</p>
-              <p className="text-sm text-slate-400 mb-8">Menos de lo que ya gastas en soluciones informales</p>
-              <Link to="/registro"
-                className="inline-flex items-center px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-2xl transition-all duration-200 shadow-lg shadow-blue-100 text-sm hover:scale-[1.03]">
-                Comenzar ahora
-              </Link>
+          {/* ── Patient panel ── */}
+          {activeTab === 'patient' && (
+            <div key="patient" style={{ animation: 'modal-in 0.2s ease-out' }}>
+              <div className="grid sm:grid-cols-2 gap-4 mb-6">
+                {[
+                  { emoji: '🕐', title: 'Cita en 36 horas',          desc: 'Sin esperas de semanas' },
+                  { emoji: '💊', title: 'Medicamentos a domicilio',   desc: 'Tu receta llega a tu puerta' },
+                  { emoji: '📋', title: 'Historia médica digital',    desc: 'Todo tu historial en un lugar' },
+                  { emoji: '📱', title: 'Telemedicina',               desc: 'Consulta sin salir de casa' },
+                ].map((card) => (
+                  <div
+                    key={card.title}
+                    className="flex items-start gap-4 p-5 rounded-2xl border border-slate-200 bg-white hover:shadow-md transition-shadow duration-200"
+                  >
+                    <span className="text-2xl shrink-0 mt-0.5">{card.emoji}</span>
+                    <div>
+                      <p className="text-sm font-medium text-slate-900">{card.title}</p>
+                      <p className="text-[13px] text-slate-500 mt-0.5">{card.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Price card */}
+              <div className="rounded-2xl p-8 text-center" style={{ background: '#f0f7ff' }}>
+                <p className="text-3xl font-extrabold text-blue-700 mb-1">$80.000 COP / mes</p>
+                <p className="text-sm text-slate-500 mb-6">Menos de lo que ya gastas en soluciones informales</p>
+                <Link to="/registro"
+                  className="inline-flex items-center px-7 py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl transition-colors shadow-sm shadow-blue-100">
+                  Comenzar ahora
+                </Link>
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* ── Doctor panel ── */}
+          {activeTab === 'doctor' && (
+            <div key="doctor" style={{ animation: 'modal-in 0.2s ease-out' }}>
+              <div className="grid sm:grid-cols-3 gap-4">
+                {[
+                  { emoji: '📅', title: 'Agenda predecible',  desc: 'Pacientes que ya están pagando' },
+                  { emoji: '💰', title: 'Pago garantizado',   desc: 'Sin contratos OPS ni demoras' },
+                  { emoji: '⚡', title: 'Menos admin',        desc: 'Más tiempo para tus pacientes' },
+                ].map((card) => (
+                  <div
+                    key={card.title}
+                    className="flex items-start gap-4 p-5 rounded-2xl border border-slate-200 bg-white hover:shadow-md transition-shadow duration-200"
+                  >
+                    <span className="text-2xl shrink-0 mt-0.5">{card.emoji}</span>
+                    <div>
+                      <p className="text-sm font-medium text-slate-900">{card.title}</p>
+                      <p className="text-[13px] text-slate-500 mt-0.5">{card.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
         </div>
       </section>
 
@@ -343,68 +353,8 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ══════════════════════════ PARA MÉDICOS ════════════════════════════ */}
-      <section id="para-medicos" className="bg-white py-28">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
 
-          <div className="text-center max-w-2xl mx-auto mb-16 fade-up">
-            <p className="text-xs font-bold uppercase tracking-widest text-blue-600 mb-3">Para Médicos</p>
-            <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 mb-4">
-              La plataforma que pone tu práctica en tus manos
-            </h2>
-            <p className="text-lg text-slate-500">
-              Enfócate en tus pacientes. Nosotros manejamos el resto.
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-8 items-start">
-
-            {/* Card 1 */}
-            <div className="fade-up rounded-2xl border border-slate-100 p-8 hover:shadow-xl transition-all duration-300 overflow-hidden relative"
-              style={{ borderTop: '4px solid #2563eb' }}>
-              <div className="w-12 h-12 bg-blue-100 rounded-2xl flex items-center justify-center mb-5">
-                <span className="text-2xl">📅</span>
-              </div>
-              <h3 className="text-xl font-bold text-slate-900 mb-3">Agenda predecible</h3>
-              <p className="text-slate-500 leading-relaxed text-sm">
-                Define tus horarios disponibles y recibe pacientes que ya están pagando.
-                Sin esperar referencias del sistema que nunca llegan. Sin horas muertas.
-              </p>
-            </div>
-
-            {/* Card 2 — highlighted */}
-            <div className="fade-up rounded-2xl border border-green-200 p-8 hover:shadow-xl transition-all duration-300 relative bg-green-50/40"
-              style={{ borderTop: '4px solid #16a34a' }}>
-              <span className="absolute top-5 right-5 bg-green-600 text-white text-xs font-bold px-2.5 py-1 rounded-full">
-                Sin contratos OPS
-              </span>
-              <div className="w-12 h-12 bg-green-100 rounded-2xl flex items-center justify-center mb-5">
-                <span className="text-2xl">💰</span>
-              </div>
-              <h3 className="text-xl font-bold text-slate-900 mb-3">Pago garantizado y puntual</h3>
-              <p className="text-slate-500 leading-relaxed text-sm">
-                Olvídate de contratos OPS y esperas de 3 meses para cobrar.
-                Con Contigo recibes tu pago por cada consulta completada — sin burocracia, sin demoras.
-              </p>
-            </div>
-
-            {/* Card 3 */}
-            <div className="fade-up rounded-2xl border border-slate-100 p-8 hover:shadow-xl transition-all duration-300"
-              style={{ borderTop: '4px solid #2563eb' }}>
-              <div className="w-12 h-12 bg-blue-100 rounded-2xl flex items-center justify-center mb-5">
-                <span className="text-2xl">⚡</span>
-              </div>
-              <h3 className="text-xl font-bold text-slate-900 mb-3">Menos admin, más medicina</h3>
-              <p className="text-slate-500 leading-relaxed text-sm">
-                Consultas digitales, recetas electrónicas y notas clínicas en la app.
-                Dedica tu tiempo a tus pacientes, no a papeleo ni autorizaciones.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ══════════════════════════ NOSOTROS ════════════════════════════════ */}
+{/* ══════════════════════════ NOSOTROS ════════════════════════════════ */}
       <section
         id="nosotros"
         className="py-32 relative overflow-hidden"
@@ -540,36 +490,3 @@ function HeroCard() {
   )
 }
 
-function IconCircle({ emoji, color }: { emoji: string; color: 'blue' | 'green' }) {
-  const bg = color === 'blue' ? 'bg-blue-100' : 'bg-green-100'
-  return (
-    <div className={`w-40 h-40 sm:w-48 sm:h-48 ${bg} rounded-full flex items-center justify-center shadow-2xl`}>
-      <span className="text-6xl sm:text-7xl">{emoji}</span>
-    </div>
-  )
-}
-
-function FeatureText({
-  title, text, stat, statType,
-}: {
-  title: string
-  text: string
-  stat: string
-  statType: 'warning' | 'success' | 'info'
-}) {
-  const styles = {
-    warning: 'border-l-4 border-red-400    bg-red-50   text-red-700',
-    success: 'border-l-4 border-green-500  bg-green-50 text-green-700',
-    info:    'border-l-4 border-blue-400   bg-blue-50  text-blue-700',
-  }[statType]
-
-  return (
-    <div>
-      <h3 className="text-2xl sm:text-3xl font-extrabold text-slate-900 leading-tight mb-4">{title}</h3>
-      <p className="text-lg text-slate-500 leading-relaxed mb-6">{text}</p>
-      <div className={`pl-4 py-2.5 pr-4 rounded-r-xl text-sm font-medium leading-snug ${styles}`}>
-        {stat}
-      </div>
-    </div>
-  )
-}
