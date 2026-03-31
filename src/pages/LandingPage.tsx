@@ -16,9 +16,8 @@ function useScrollAnimations() {
 }
 
 const NAV_LINKS = [
-  { label: 'Beneficios',    id: 'para-pacientes' },
-  { label: 'Cómo Funciona', id: 'como-funciona' },
-  { label: 'Nosotros',      id: 'nosotros' },
+  { label: 'Beneficios', id: 'para-pacientes' },
+  { label: 'Nosotros',   id: 'nosotros' },
 ]
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -293,65 +292,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ══════════════════════════ CÓMO FUNCIONA ═══════════════════════════ */}
-      <section id="como-funciona" className="py-28" style={{ backgroundColor: '#f8fafc' }}>
-        <div className="max-w-5xl mx-auto px-4 sm:px-6">
-
-          <div className="text-center max-w-xl mx-auto mb-20 fade-up">
-            <p className="text-xs font-bold uppercase tracking-widest text-green-600 mb-3">Cómo Funciona</p>
-            <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 mb-4">
-              Un pago simple. Todo incluido.
-            </h2>
-            <p className="text-lg text-slate-500">
-              En menos de 5 minutos estás listo para acceder a toda la atención que necesitas.
-            </p>
-          </div>
-
-          {/* Steps grid */}
-          <div className="relative grid md:grid-cols-3 gap-10 mb-16">
-            {/* Gradient connector */}
-            <div
-              className="hidden md:block absolute h-px top-10 z-0"
-              style={{
-                left:       'calc(16.67% + 2.75rem)',
-                right:      'calc(16.67% + 2.75rem)',
-                background: 'linear-gradient(to right, #bfdbfe, #bbf7d0)',
-              }}
-              aria-hidden="true"
-            />
-
-            {[
-              { n: '1', emoji: '👤', title: 'Crea tu cuenta',           desc: 'Regístrate con tu email en menos de 2 minutos. Sin papeles, sin trámites, sin EPS.',                                                                               color: 'bg-blue-600',  ring: 'shadow-blue-200' },
-              { n: '2', emoji: '📅', title: 'Agenda tu cita',           desc: 'Elige la especialidad, selecciona un horario disponible y cuéntale a tu médico el motivo de tu consulta.',                                                          color: 'bg-green-600', ring: 'shadow-green-200' },
-              { n: '3', emoji: '🏠', title: 'Recibe atención completa', desc: 'Tu médico te atiende, escribe sus conclusiones y receta tus medicamentos. Todo llega a tu historial y a tu puerta.',                                                color: 'bg-blue-600',  ring: 'shadow-blue-200' },
-            ].map((step, i) => (
-              <div key={step.n} className="fade-up relative z-10 text-center px-2" style={{ transitionDelay: `${i * 110}ms` }}>
-                <div className={`relative w-20 h-20 ${step.color} rounded-full flex flex-col items-center justify-center mx-auto mb-6 shadow-xl ${step.ring}`}>
-                  <span className="text-white text-[10px] font-extrabold opacity-70 leading-none mb-0.5">{step.n}</span>
-                  <span className="text-2xl leading-none">{step.emoji}</span>
-                </div>
-                <h3 className="text-lg font-bold text-slate-900 mb-2">{step.title}</h3>
-                <p className="text-slate-500 text-sm leading-relaxed max-w-xs mx-auto">{step.desc}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* Gradient pricing card */}
-          <div
-            className="fade-up rounded-3xl p-10 sm:p-14 text-center text-white"
-            style={{ background: 'linear-gradient(135deg, #1e3a5f 0%, #1a5276 55%, #16a34a 100%)' }}
-          >
-            <p className="text-3xl sm:text-4xl font-extrabold text-white mb-2">$80.000 COP al mes</p>
-            <p className="text-white/60 text-base mb-8">
-              Sin contratos de largo plazo · Cancela cuando quieras
-            </p>
-            <Link to="/registro"
-              className="inline-flex items-center px-8 py-4 bg-white text-[#1e3a5f] font-bold rounded-2xl hover:scale-[1.03] transition-all duration-200 shadow-lg text-sm">
-              Comenzar ahora
-            </Link>
-          </div>
-        </div>
-      </section>
 
 
 {/* ══════════════════════════ NOSOTROS ════════════════════════════════ */}
