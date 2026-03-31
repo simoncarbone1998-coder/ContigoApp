@@ -167,7 +167,7 @@ export default function LandingPage() {
                 Un médico en menos de 36 horas y tus medicamentos en la puerta.
                 Por{' '}
                 <strong className="text-white font-bold">$80.000 COP al mes</strong>
-                {' '}— menos de lo que ya gastas navegando un sistema que no funciona.
+                .
               </p>
               <div className="flex flex-wrap gap-4">
                 <Link to="/registro"
