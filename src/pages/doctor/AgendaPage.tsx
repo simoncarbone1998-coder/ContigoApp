@@ -9,6 +9,8 @@ import { specialtyLabel } from '../../lib/types'
 import type { AvailabilitySlot, Appointment } from '../../lib/types'
 import { generateSlots, roundUpToSlot } from '../../lib/slots'
 import { createDailyRoom, createDailyToken } from '../../services/dailyService'
+import { generateICS, downloadICS, buildGoogleCalendarUrl } from '../../utils/exportCalendar'
+import type { ICSAppointment } from '../../utils/exportCalendar'
 
 /** Returns minutes until slot starts (negative = already started) */
 function minutesUntil(slotDate: string, slotStartTime: string): number {
@@ -71,6 +73,10 @@ export default function DoctorAgendaPage() {
   const [videoToken,   setVideoToken]   = useState<string | null>(null)
   const [joiningVideo, setJoiningVideo] = useState(false)
   const [videoError,   setVideoError]   = useState<string | null>(null)
+
+  // Calendar export
+  const [exporting,    setExporting]    = useState(false)
+  const [exportToast,  setExportToast]  = useState<string | null>(null)
 
   if (profile && !profile.specialty) {
     navigate('/doctor/setup', { replace: true })
@@ -152,6 +158,47 @@ export default function DoctorAgendaPage() {
       setVideoError(err instanceof Error ? err.message : 'No se pudo crear la sala de video. Intenta de nuevo.')
     }
     setJoiningVideo(false)
+  }
+
+  async function handleExportCalendar() {
+    if (!profile) return
+    setExporting(true)
+    setExportToast(null)
+
+    const todayStr = new Date().toISOString().slice(0, 10)
+
+    const { data } = await supabase
+      .from('appointments')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .select('id, reason, slot:slot_id(date, start_time, end_time), patient:patient_id(full_name)')
+      .eq('doctor_id', profile.id)
+      .eq('status', 'confirmed')
+      .eq('completed', false)
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const future = ((data ?? []) as any[]).filter((a) => a.slot?.date >= todayStr)
+
+    if (future.length === 0) {
+      setExportToast('No tienes citas próximas para exportar')
+      setExporting(false)
+      setTimeout(() => setExportToast(null), 4000)
+      return
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const events: ICSAppointment[] = future.map((a: any) => ({
+      id:          a.id,
+      reason:      a.reason,
+      patientName: a.patient?.full_name ?? 'Paciente',
+      specialty:   specialtyLabel(profile.specialty),
+      slotDate:    a.slot.date,
+      slotStart:   a.slot.start_time,
+      slotEnd:     a.slot.end_time,
+    }))
+
+    const now = new Date()
+    downloadICS(generateICS(events), now.getMonth(), now.getFullYear())
+    setExporting(false)
   }
 
   async function handleAddSlots(e: React.FormEvent) {
@@ -309,10 +356,32 @@ export default function DoctorAgendaPage() {
       <NavBar />
 
       <main className="max-w-5xl mx-auto px-4 py-8 space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Mi Agenda</h1>
-          <p className="text-slate-500 text-sm mt-1">Gestiona tus horarios y consultas.</p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">Mi Agenda</h1>
+            <p className="text-slate-500 text-sm mt-1">Gestiona tus horarios y consultas.</p>
+          </div>
+          <button
+            onClick={handleExportCalendar}
+            disabled={exporting}
+            className="shrink-0 flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-blue-200 text-sm font-semibold text-blue-600 bg-white hover:bg-blue-50 transition-colors disabled:opacity-60"
+          >
+            {exporting ? (
+              <span className="w-4 h-4 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin" />
+            ) : (
+              '📥'
+            )}
+            Exportar agenda
+          </button>
         </div>
+
+        {exportToast && (
+          <div className="flex items-center gap-2.5 p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800"
+            style={{ animation: 'modal-in 0.2s ease-out' }}>
+            <span className="text-base">📭</span>
+            {exportToast}
+          </div>
+        )}
 
         {/* Sub-tabs */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -555,6 +624,23 @@ export default function DoctorAgendaPage() {
                     <InfoRow label="Fecha de nacimiento" value={appt.patient?.birth_date ?? 'No registrada'} />
                     {appt.reason && <InfoRow label="Motivo de consulta" value={appt.reason} />}
                   </div>
+
+                  {/* Google Calendar link */}
+                  <a
+                    href={buildGoogleCalendarUrl({
+                      patientName: appt.patient?.full_name ?? 'Paciente',
+                      specialty:   specialtyLabel(profile?.specialty ?? null),
+                      reason:      appt.reason,
+                      slotDate:    detailSlot.date,
+                      slotStart:   detailSlot.start_time,
+                      slotEnd:     detailSlot.end_time,
+                    })}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 font-medium transition-colors"
+                  >
+                    📅 Agregar a Google Calendar →
+                  </a>
 
                   {/* Summary */}
                   <div>
