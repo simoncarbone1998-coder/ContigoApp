@@ -48,6 +48,8 @@ export default function DoctorAgendaPage() {
 
   // Calendar
   const today = new Date()
+  const todayStr   = today.toISOString().split('T')[0]
+  const nowTimeStr = `${String(today.getHours()).padStart(2, '0')}:${String(today.getMinutes()).padStart(2, '0')}`
   const [year, setYear]   = useState(today.getFullYear())
   const [month, setMonth] = useState(today.getMonth())
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
@@ -208,6 +210,15 @@ export default function DoctorAgendaPage() {
     setFormSuccess(false)
     if (!date || !startTime || !endTime) { setFormError('Completa todos los campos.'); return }
     if (endTime <= startTime) { setFormError('La hora fin debe ser posterior al inicio.'); return }
+
+    // Block past date/time
+    const nowCheck = new Date()
+    const nowDateStr = nowCheck.toISOString().split('T')[0]
+    const nowCheckTime = `${String(nowCheck.getHours()).padStart(2, '0')}:${String(nowCheck.getMinutes()).padStart(2, '0')}`
+    if (date < nowDateStr || (date === nowDateStr && startTime <= nowCheckTime)) {
+      setFormError('No puedes crear horarios en el pasado')
+      return
+    }
 
     const generated = generateSlots(date, startTime, endTime)
     if (generated.length === 0) {
@@ -439,13 +450,14 @@ export default function DoctorAgendaPage() {
 
                 <form onSubmit={handleAddSlots} className="grid sm:grid-cols-4 gap-3">
                   {[
-                    { id: 'date', label: 'Fecha', type: 'date', value: date, onChange: setDate },
-                    { id: 'start', label: 'Hora inicio', type: 'time', value: startTime, onChange: setStartTime },
-                    { id: 'end', label: 'Hora fin', type: 'time', value: endTime, onChange: setEndTime },
+                    { id: 'date',  label: 'Fecha',       type: 'date', value: date,      onChange: setDate,      min: todayStr },
+                    { id: 'start', label: 'Hora inicio',  type: 'time', value: startTime, onChange: setStartTime, min: date === todayStr ? nowTimeStr : undefined },
+                    { id: 'end',   label: 'Hora fin',     type: 'time', value: endTime,   onChange: setEndTime,   min: undefined },
                   ].map((f) => (
                     <div key={f.id}>
                       <label htmlFor={f.id} className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{f.label}</label>
                       <input id={f.id} type={f.type} value={f.value} onChange={(e) => f.onChange(e.target.value)}
+                        min={f.min}
                         className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors bg-white" />
                     </div>
                   ))}
