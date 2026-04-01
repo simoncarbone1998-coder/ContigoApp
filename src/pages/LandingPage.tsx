@@ -49,18 +49,22 @@ export default function LandingPage() {
     <div className="min-h-screen font-sans">
 
       {/* ══════════════════════════════ NAVBAR ══════════════════════════════ */}
-      <header className={`fixed inset-x-0 top-0 z-50 transition-all duration-300 ${
-        scrolled
-          ? 'bg-white/96 backdrop-blur-md shadow-sm border-b border-slate-100'
-          : 'bg-transparent'
-      }`}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+      <header
+        style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50 }}
+        className={`transition-all duration-300 ${
+          scrolled
+            ? 'bg-white/96 backdrop-blur-md shadow-sm border-b border-slate-100'
+            : 'bg-transparent'
+        }`}
+      >
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4" style={{ maxWidth: '80rem', margin: '0 auto', padding: '0 1.5rem', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
 
           {/* Logo */}
-          <Link to="/" className="relative flex items-center h-9 shrink-0">
+          <Link to="/" className="relative flex items-center h-10 shrink-0" style={{ height: '40px' }}>
             <img
               src="/logo.png" alt="Contigo"
-              className={`h-9 w-auto absolute transition-opacity duration-300 ${scrolled ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+              style={{ height: '40px', width: 'auto', maxHeight: '40px' }}
+              className={`absolute transition-opacity duration-300 ${scrolled ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
             />
             <span className={`text-xl font-extrabold transition-opacity duration-300 ${scrolled ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
               <span style={{ color: '#86efac' }}>con</span><span className="text-white">tigo</span>
