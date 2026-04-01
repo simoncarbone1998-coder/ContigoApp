@@ -188,7 +188,31 @@ async function sendEmail(to: string, subject: string, html: string) {
 
 Deno.serve(async () => {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+  const nowMs = Date.now()
 
+  // ── 1. Auto-close past appointments ────────────────────────────────────────
+  const { data: openAppts } = await supabase
+    .from('appointments')
+    .select('id, slot:slot_id(date, start_time)')
+    .eq('status', 'confirmed')
+    .eq('completed', false)
+
+  const toClose = (openAppts ?? []).filter((a: any) => {
+    if (!a.slot?.date || !a.slot?.start_time) return false
+    return new Date(`${a.slot.date}T${a.slot.start_time}`).getTime() < nowMs
+  })
+
+  for (const a of toClose) {
+    const completedAt = new Date(`${(a as any).slot.date}T${(a as any).slot.start_time}`).toISOString()
+    await supabase.from('appointments').update({
+      completed:    true,
+      completed_at: completedAt,
+      summary:      'Cita no atendida - cerrada automáticamente',
+    }).eq('id', (a as any).id)
+  }
+  console.log(`Auto-closed ${toClose.length} past appointments.`)
+
+  // ── 2. Send 24-hour reminders ───────────────────────────────────────────────
   // Fetch all confirmed, not-completed, not-reminded appointments with their slots + profiles
   const { data: appointments, error } = await supabase
     .from('appointments')

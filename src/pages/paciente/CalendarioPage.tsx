@@ -228,58 +228,85 @@ export default function PatientCalendarioPage() {
                     {dayAppointments.map((appt) => {
                       const mins = appt.slot ? minutesUntil(appt.slot.date, appt.slot.start_time) : Infinity
                       const canJoin = mins <= 5 && mins > -60
+                      const isExpired = appt.slot
+                        ? new Date(`${appt.slot.date}T${appt.slot.start_time}`).getTime() < Date.now()
+                        : false
+
                       return (
                         <li key={appt.id}>
-                          <div className="p-4 rounded-xl border bg-emerald-50/60 border-emerald-200 space-y-3">
-                            <button
-                              onClick={() => openModal(appt)}
-                              className="w-full text-left"
-                            >
-                              <div className="flex flex-col gap-1">
-                                <p className="text-sm font-semibold text-slate-900">
-                                  Dr(a). {appt.doctor?.full_name ?? '—'}
-                                </p>
-                                {appt.slot && (
-                                  <p className="text-xs text-slate-500">
-                                    {formatTime(appt.slot.start_time)} – {formatTime(appt.slot.end_time)}
+                          {isExpired ? (
+                            /* ── Expired: gray, no actions ── */
+                            <div className="p-4 rounded-xl border bg-slate-50 border-slate-200">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex flex-col gap-1">
+                                  <p className="text-sm font-semibold text-slate-500">
+                                    Dr(a). {appt.doctor?.full_name ?? '—'}
                                   </p>
-                                )}
-                                <p className="text-xs text-slate-400">
-                                  {specialtyLabel(appt.doctor?.specialty)}
-                                </p>
+                                  {appt.slot && (
+                                    <p className="text-xs text-slate-400">
+                                      {formatTime(appt.slot.start_time)} – {formatTime(appt.slot.end_time)}
+                                    </p>
+                                  )}
+                                  <p className="text-xs text-slate-400">
+                                    {specialtyLabel(appt.doctor?.specialty)}
+                                  </p>
+                                </div>
+                                <span className="shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
+                                  No atendida
+                                </span>
                               </div>
-                            </button>
-
-                            {/* Join video button */}
-                            <div className="pt-1 border-t border-emerald-200">
-                              <button
-                                onClick={() => handleJoinVideo(appt)}
-                                disabled={!canJoin || joiningVideo}
-                                title={
-                                  !canJoin && mins > 5
-                                    ? `La consulta comenzará en ${Math.ceil(mins)} minutos`
-                                    : undefined
-                                }
-                                className={`w-full py-2 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${
-                                  canJoin
-                                    ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm'
-                                    : 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
-                                }`}
-                              >
-                                📹
-                                {joiningVideo
-                                  ? 'Conectando...'
-                                  : canJoin
-                                  ? 'Unirse a la consulta'
-                                  : mins > 5
-                                  ? `Disponible en ${Math.ceil(mins)} min`
-                                  : 'Consulta finalizada'}
-                              </button>
-                              {videoError && (
-                                <p className="text-xs text-red-600 mt-1.5 text-center">{videoError}</p>
-                              )}
                             </div>
-                          </div>
+                          ) : (
+                            /* ── Active: green, with video join ── */
+                            <div className="p-4 rounded-xl border bg-emerald-50/60 border-emerald-200 space-y-3">
+                              <button
+                                onClick={() => openModal(appt)}
+                                className="w-full text-left"
+                              >
+                                <div className="flex flex-col gap-1">
+                                  <p className="text-sm font-semibold text-slate-900">
+                                    Dr(a). {appt.doctor?.full_name ?? '—'}
+                                  </p>
+                                  {appt.slot && (
+                                    <p className="text-xs text-slate-500">
+                                      {formatTime(appt.slot.start_time)} – {formatTime(appt.slot.end_time)}
+                                    </p>
+                                  )}
+                                  <p className="text-xs text-slate-400">
+                                    {specialtyLabel(appt.doctor?.specialty)}
+                                  </p>
+                                </div>
+                              </button>
+
+                              {/* Join video button */}
+                              <div className="pt-1 border-t border-emerald-200">
+                                <button
+                                  onClick={() => handleJoinVideo(appt)}
+                                  disabled={!canJoin || joiningVideo}
+                                  title={
+                                    !canJoin && mins > 5
+                                      ? `La consulta comenzará en ${Math.ceil(mins)} minutos`
+                                      : undefined
+                                  }
+                                  className={`w-full py-2 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${
+                                    canJoin
+                                      ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm'
+                                      : 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
+                                  }`}
+                                >
+                                  📹
+                                  {joiningVideo
+                                    ? 'Conectando...'
+                                    : canJoin
+                                    ? 'Unirse a la consulta'
+                                    : `Disponible en ${Math.ceil(mins)} min`}
+                                </button>
+                                {videoError && (
+                                  <p className="text-xs text-red-600 mt-1.5 text-center">{videoError}</p>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </li>
                       )
                     })}
@@ -338,10 +365,12 @@ export default function PatientCalendarioPage() {
                     className="flex-1 py-3 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
                     Cerrar
                   </button>
-                  <button onClick={() => setConfirmCancel(true)}
-                    className="flex-1 py-3 rounded-xl border border-red-200 text-sm font-semibold text-red-600 bg-white hover:bg-red-50 transition-colors">
-                    Cancelar cita
-                  </button>
+                  {!(modalAppt.slot && new Date(`${modalAppt.slot.date}T${modalAppt.slot.start_time}`).getTime() < Date.now()) && (
+                    <button onClick={() => setConfirmCancel(true)}
+                      className="flex-1 py-3 rounded-xl border border-red-200 text-sm font-semibold text-red-600 bg-white hover:bg-red-50 transition-colors">
+                      Cancelar cita
+                    </button>
+                  )}
                 </div>
               </>
             ) : (

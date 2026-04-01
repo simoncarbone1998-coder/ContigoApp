@@ -160,12 +160,18 @@ export default function PatientAgendarPage() {
     if (!profile) return
     const { data } = await supabase
       .from('appointments')
-      .select('id, slot:slot_id(specialty), doctor:doctor_id(specialty)')
+      .select('id, slot:slot_id(specialty, date, start_time), doctor:doctor_id(specialty)')
       .eq('patient_id', profile.id)
       .eq('status', 'confirmed')
       .eq('completed', false)
+    const nowMs = Date.now()
     const set = new Set<string>()
     ;(data ?? []).forEach((a: any) => {
+      // Skip appointments whose slot has already passed — don't block new bookings
+      if (a.slot?.date && a.slot?.start_time) {
+        const slotMs = new Date(`${a.slot.date}T${a.slot.start_time}`).getTime()
+        if (slotMs < nowMs) return
+      }
       const spec = a.slot?.specialty ?? a.doctor?.specialty
       if (spec) set.add(spec)
     })
