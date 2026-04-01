@@ -182,21 +182,25 @@ export default function PatientAgendarPage() {
     setLoading(true)
     setError(null)
     setSelectedDate(null)
+    const todayStr = new Date().toISOString().slice(0, 10)
     const { data, error: err } = await supabase
       .from('availability_slots')
       .select('*, doctor:doctor_id(id, full_name, email, specialty, avatar_url)')
       .eq('is_booked', false)
+      .gte('date', todayStr)
       .order('date', { ascending: true })
       .order('start_time', { ascending: true })
     if (err) {
       setError('No se pudieron cargar los horarios.')
       setSlots([])
     } else {
-      // Filter by matching specialty and only keep slots at :00 or :30 starts
+      const now = Date.now()
+      // Filter by matching specialty, only keep slots at :00 or :30 starts, and exclude past slots
       const filtered = ((data ?? []) as AvailabilitySlot[]).filter(
         (s) =>
           (s.specialty === specialty || s.doctor?.specialty === specialty) &&
-          (s.start_time.slice(3, 5) === '00' || s.start_time.slice(3, 5) === '30')
+          (s.start_time.slice(3, 5) === '00' || s.start_time.slice(3, 5) === '30') &&
+          new Date(`${s.date}T${s.start_time}`).getTime() > now
       )
       setSlots(filtered)
     }
@@ -421,7 +425,7 @@ export default function PatientAgendarPage() {
                 style={{ animation: 'modal-in 0.15s ease-out' }}>
                 <div className="flex items-center gap-2.5 mb-3">
                   <StepBadge n={4} active={true} />
-                  <h3 className="text-sm font-bold text-slate-900">Motivo de consulta (opcional)</h3>
+                  <h3 className="text-sm font-bold text-slate-900">Motivo de consulta</h3>
                 </div>
                 <textarea
                   value={reason}
@@ -430,10 +434,20 @@ export default function PatientAgendarPage() {
                   placeholder="Describe brevemente el motivo de tu consulta..."
                   className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors resize-none"
                 />
+                <div className="flex justify-between items-center mt-1.5 mb-3">
+                  <p className="text-xs text-slate-400">
+                    {reason.trim().length < 10
+                      ? 'Por favor describe el motivo de tu consulta (mínimo 10 caracteres)'
+                      : ''}
+                  </p>
+                  <p className={`text-xs shrink-0 ml-2 ${reason.trim().length >= 10 ? 'text-green-600' : 'text-slate-400'}`}>
+                    {reason.trim().length}/10 caracteres mínimo
+                  </p>
+                </div>
                 <button
                   onClick={handleBook}
-                  disabled={submitting}
-                  className="mt-3 w-full sm:w-auto px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors disabled:opacity-50 shadow-sm shadow-blue-100"
+                  disabled={submitting || reason.trim().length < 10}
+                  className="w-full sm:w-auto px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shadow-blue-100"
                 >
                   {submitting ? 'Reservando...' : `Confirmar cita · ${formatTime(bookingSlot.start_time)}`}
                 </button>
