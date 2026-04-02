@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase'
 import NavBar from '../../components/NavBar'
 import { specialtyLabel } from '../../lib/types'
 import type { Appointment } from '../../lib/types'
+import FeedbackModal from '../../components/FeedbackModal'
 
 function formatDate(d: string) {
   const [y, m, day] = d.split('-')
@@ -40,6 +41,11 @@ export default function PatientPerfilPage() {
   const [loadingH, setLoadingH] = useState(true)
   const [selected, setSelected] = useState<Appointment | null>(null)
 
+  type FeedbackRecord = { appointment_id: string; rating: number; comment: string | null }
+  const [feedbacks,     setFeedbacks]     = useState<Record<string, FeedbackRecord>>({})
+  const [feedbackAppt,  setFeedbackAppt]  = useState<Appointment | null>(null)
+  const [feedbackToast, setFeedbackToast] = useState<string | null>(null)
+
   const fetchHistory = useCallback(async () => {
     if (!profile) return
     setLoadingH(true)
@@ -55,6 +61,19 @@ export default function PatientPerfilPage() {
       (a) => a.slot?.date != null && a.slot.date < TODAY
     )
     setHistory(past)
+
+    // Fetch feedback for these appointments
+    const apptIds = past.map((a) => a.id)
+    if (apptIds.length > 0) {
+      const { data: fbs } = await supabase
+        .from('appointment_feedback')
+        .select('appointment_id, rating, comment')
+        .in('appointment_id', apptIds)
+      const fbMap: Record<string, FeedbackRecord> = {}
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(fbs ?? []).forEach((f: any) => { fbMap[f.appointment_id] = f as FeedbackRecord })
+      setFeedbacks(fbMap)
+    }
     setLoadingH(false)
   }, [profile])
 
@@ -213,33 +232,78 @@ export default function PatientPerfilPage() {
           ) : history.length === 0 ? (
             <p className="text-slate-500 text-sm text-center py-8">No tienes citas en tu historial.</p>
           ) : (
+            <>
+            {feedbackToast && (
+              <div className="mb-4 flex gap-3 p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-sm text-emerald-800"
+                style={{ animation: 'modal-in 0.2s ease-out' }}>
+                {feedbackToast}
+              </div>
+            )}
             <ul className="space-y-2.5">
-              {history.map((appt) => (
-                <li key={appt.id}>
-                  <button
-                    onClick={() => setSelected(appt)}
-                    className="w-full text-left p-4 rounded-xl bg-slate-50 border border-slate-100 hover:border-blue-200 transition-colors"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900">
-                          Dr(a). {appt.doctor?.full_name ?? '—'}
-                        </p>
-                        <p className="text-xs text-slate-500 mt-0.5">
-                          {appt.slot ? `${formatDate(appt.slot.date)} · ${formatTime(appt.slot.start_time)}` : '—'}
-                        </p>
+              {history.map((appt) => {
+                const fb = feedbacks[appt.id]
+                return (
+                  <li key={appt.id}>
+                    <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 hover:border-blue-200 transition-colors">
+                      <button
+                        onClick={() => setSelected(appt)}
+                        className="w-full text-left"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900">
+                              Dr(a). {appt.doctor?.full_name ?? '—'}
+                            </p>
+                            <p className="text-xs text-slate-500 mt-0.5">
+                              {appt.slot ? `${formatDate(appt.slot.date)} · ${formatTime(appt.slot.start_time)}` : '—'}
+                            </p>
+                          </div>
+                          <span className="shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full border bg-blue-50 text-blue-700 border-blue-200">
+                            {specialtyLabel(appt.doctor?.specialty)}
+                          </span>
+                        </div>
+                      </button>
+
+                      {/* Feedback row */}
+                      <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center gap-2">
+                        {fb ? (
+                          <>
+                            <StarsDisplay rating={fb.rating} />
+                            <span className="text-xs text-slate-500">Calificación enviada ✓</span>
+                          </>
+                        ) : (
+                          <button
+                            onClick={() => setFeedbackAppt(appt)}
+                            className="text-xs text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1 transition-colors"
+                          >
+                            ⭐ Calificar consulta
+                          </button>
+                        )}
                       </div>
-                      <span className="shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full border bg-blue-50 text-blue-700 border-blue-200">
-                        {specialtyLabel(appt.doctor?.specialty)}
-                      </span>
                     </div>
-                  </button>
-                </li>
-              ))}
+                  </li>
+                )
+              })}
             </ul>
+            </>
           )}
         </div>
       </main>
+
+      {/* Feedback modal */}
+      {feedbackAppt && profile && (
+        <FeedbackModal
+          appointment={feedbackAppt}
+          patientId={profile.id}
+          onClose={() => setFeedbackAppt(null)}
+          onSubmitted={() => {
+            setFeedbackAppt(null)
+            setFeedbackToast('¡Gracias por tu calificación! 🌟')
+            setTimeout(() => setFeedbackToast(null), 4000)
+            fetchHistory()
+          }}
+        />
+      )}
 
       {/* Appointment detail modal */}
       {selected && (
@@ -299,6 +363,27 @@ export default function PatientPerfilPage() {
               })()}
             </div>
 
+            {/* Feedback section in detail modal */}
+            <div className="pt-4 border-t border-slate-100">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Tu calificación</p>
+              {feedbacks[selected.id] ? (
+                <div className="space-y-1.5">
+                  <StarsDisplay rating={feedbacks[selected.id].rating} />
+                  {feedbacks[selected.id].comment && (
+                    <p className="text-xs text-slate-500 italic">"{feedbacks[selected.id].comment}"</p>
+                  )}
+                  <p className="text-xs text-slate-400">Calificación enviada ✓</p>
+                </div>
+              ) : (
+                <button
+                  onClick={() => { setSelected(null); setFeedbackAppt(selected) }}
+                  className="text-sm text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1.5 transition-colors"
+                >
+                  ⭐ Calificar esta consulta
+                </button>
+              )}
+            </div>
+
             <button onClick={() => setSelected(null)}
               className="mt-6 w-full py-3 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
               Cerrar
@@ -316,5 +401,15 @@ function InfoRow({ label, value }: { label: string; value: string }) {
       <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">{label}</p>
       <p className="text-sm font-medium text-slate-800">{value}</p>
     </div>
+  )
+}
+
+function StarsDisplay({ rating }: { rating: number }) {
+  return (
+    <span className="text-base leading-none">
+      {[1, 2, 3, 4, 5].map((s) => (
+        <span key={s} style={{ color: s <= rating ? '#f59e0b' : '#d1d5db' }}>★</span>
+      ))}
+    </span>
   )
 }

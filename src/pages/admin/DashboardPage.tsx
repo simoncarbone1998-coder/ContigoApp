@@ -18,7 +18,7 @@ function initials(name: string | null, email: string | null) {
   return (email?.[0] ?? '?').toUpperCase()
 }
 
-type Tab = 'appointments' | 'patients' | 'doctors'
+type Tab = 'appointments' | 'patients' | 'doctors' | 'ratings'
 
 export default function AdminDashboard() {
   const [tab, setTab] = useState<Tab>('appointments')
@@ -28,20 +28,26 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true)
   const [cancelling, setCancelling] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [feedbacks, setFeedbacks] = useState<any[]>([])
 
   const fetchAll = useCallback(async () => {
     setLoading(true)
     setError(null)
-    const [pR, dR, aR] = await Promise.all([
+    const [pR, dR, aR, fR] = await Promise.all([
       supabase.from('profiles').select('*').eq('role', 'patient').order('full_name'),
       supabase.from('profiles').select('*').eq('role', 'doctor').order('full_name'),
       supabase.from('appointments').select('*, patient:patient_id(id, full_name, email), doctor:doctor_id(id, full_name, email), slot:slot_id(*)').order('created_at', { ascending: false }),
+      supabase.from('appointment_feedback')
+        .select('id, rating, comment, created_at, doctor_id, patient:patient_id(full_name), doctor:doctor_id(full_name), appointment:appointment_id(slot:slot_id(date, start_time))')
+        .order('created_at', { ascending: false }),
     ])
     if (pR.error || dR.error || aR.error) setError('No se pudo cargar la información. Intenta de nuevo.')
     else {
       setPatients((pR.data ?? []) as Profile[])
       setDoctors((dR.data ?? []) as Profile[])
       setAppointments((aR.data ?? []) as Appointment[])
+      setFeedbacks(fR.data ?? [])
     }
     setLoading(false)
   }, [])
@@ -68,10 +74,28 @@ export default function AdminDashboard() {
     },
   ]
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const doctorAvgMap: Record<string, number> = {}
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const ratingsByDoctor: Record<string, number[]> = {}
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  feedbacks.forEach((f: any) => {
+    if (!ratingsByDoctor[f.doctor_id]) ratingsByDoctor[f.doctor_id] = []
+    ratingsByDoctor[f.doctor_id].push(f.rating)
+  })
+  Object.entries(ratingsByDoctor).forEach(([id, ratings]) => {
+    doctorAvgMap[id] = ratings.reduce((a, b) => a + b, 0) / ratings.length
+  })
+
+  const avgRating = feedbacks.length
+    ? (feedbacks.reduce((sum: number, f: any) => sum + f.rating, 0) / feedbacks.length)
+    : 0
+
   const tabs: { key: Tab; label: string; count: number }[] = [
     { key: 'appointments', label: 'Citas', count: appointments.length },
     { key: 'patients', label: 'Pacientes', count: patients.length },
     { key: 'doctors', label: 'Médicos', count: doctors.length },
+    { key: 'ratings', label: 'Calificaciones', count: feedbacks.length },
   ]
 
   return (
@@ -136,7 +160,9 @@ export default function AdminDashboard() {
             ) : tab === 'patients' ? (
               <ProfileTable profiles={patients} emptyMsg="No hay pacientes registrados." />
             ) : tab === 'doctors' ? (
-              <ProfileTable profiles={doctors} emptyMsg="No hay médicos registrados." />
+              <ProfileTable profiles={doctors} emptyMsg="No hay médicos registrados." ratingMap={doctorAvgMap} />
+            ) : tab === 'ratings' ? (
+              <RatingsSection feedbacks={feedbacks} avgRating={avgRating} />
             ) : (
               <AppointmentsTable appointments={appointments} cancelling={cancelling} onCancel={handleCancel} />
             )}
@@ -147,7 +173,7 @@ export default function AdminDashboard() {
   )
 }
 
-function ProfileTable({ profiles, emptyMsg }: { profiles: Profile[]; emptyMsg: string }) {
+function ProfileTable({ profiles, emptyMsg, ratingMap }: { profiles: Profile[]; emptyMsg: string; ratingMap?: Record<string, number> }) {
   if (profiles.length === 0) {
     return (
       <div className="text-center py-10">
@@ -172,7 +198,15 @@ function ProfileTable({ profiles, emptyMsg }: { profiles: Profile[]; emptyMsg: s
                   <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
                     <span className="text-blue-700 text-xs font-bold">{initials(p.full_name, p.email)}</span>
                   </div>
-                  <span className="font-semibold text-slate-900">{p.full_name ?? '—'}</span>
+                  <div>
+                    <span className="font-semibold text-slate-900">{p.full_name ?? '—'}</span>
+                    {ratingMap?.[p.id] !== undefined && (
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <StarsDisplay rating={Math.round(ratingMap[p.id])} />
+                        <span className="text-xs text-slate-400">{ratingMap[p.id].toFixed(1)}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </td>
               <td className="py-3.5 text-slate-500">{p.email ?? '—'}</td>
@@ -180,6 +214,87 @@ function ProfileTable({ profiles, emptyMsg }: { profiles: Profile[]; emptyMsg: s
           ))}
         </tbody>
       </table>
+    </div>
+  )
+}
+
+function StarsDisplay({ rating }: { rating: number }) {
+  return (
+    <span className="text-sm leading-none">
+      {[1, 2, 3, 4, 5].map((s) => (
+        <span key={s} style={{ color: s <= rating ? '#f59e0b' : '#d1d5db' }}>★</span>
+      ))}
+    </span>
+  )
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function RatingsSection({ feedbacks, avgRating }: { feedbacks: any[]; avgRating: number }) {
+  return (
+    <div className="space-y-6">
+      {/* Summary cards */}
+      <div className="grid sm:grid-cols-2 gap-4">
+        <div className="bg-amber-50 rounded-2xl border border-amber-100 p-5">
+          <p className="text-2xl mb-2">⭐</p>
+          <p className="text-3xl font-extrabold text-amber-700">
+            {feedbacks.length > 0 ? avgRating.toFixed(1) : '—'}
+          </p>
+          <p className="text-xs text-slate-500 mt-1 font-medium">Promedio general</p>
+        </div>
+        <div className="bg-violet-50 rounded-2xl border border-violet-100 p-5">
+          <p className="text-2xl mb-2">💬</p>
+          <p className="text-3xl font-extrabold text-violet-700">{feedbacks.length}</p>
+          <p className="text-xs text-slate-500 mt-1 font-medium">Total calificaciones</p>
+        </div>
+      </div>
+
+      {feedbacks.length === 0 ? (
+        <div className="text-center py-10">
+          <p className="text-slate-500 text-sm font-medium">No hay calificaciones registradas aún.</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-100">
+                {['Médico', 'Paciente', 'Fecha', 'Calificación', 'Comentario'].map((h) => (
+                  <th key={h} className="text-left py-3 pr-4 text-xs font-semibold text-slate-400 uppercase tracking-wide last:pr-0">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {feedbacks.map((f: any) => {
+                const slotDate = f.appointment?.slot?.date
+                const slotTime = f.appointment?.slot?.start_time
+                return (
+                  <tr key={f.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                    <td className="py-3.5 pr-4 font-semibold text-slate-900">
+                      {f.doctor?.full_name ?? '—'}
+                    </td>
+                    <td className="py-3.5 pr-4 text-slate-600">
+                      {f.patient?.full_name ?? '—'}
+                    </td>
+                    <td className="py-3.5 pr-4 text-slate-500 whitespace-nowrap">
+                      {slotDate ? (() => {
+                        const [y, m, d] = slotDate.split('-')
+                        return `${d}/${m}/${y}${slotTime ? ` · ${slotTime.slice(0, 5)}` : ''}`
+                      })() : '—'}
+                    </td>
+                    <td className="py-3.5 pr-4">
+                      <StarsDisplay rating={f.rating} />
+                    </td>
+                    <td className="py-3.5 text-slate-500 max-w-xs truncate">
+                      {f.comment ?? <span className="text-slate-300">—</span>}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }

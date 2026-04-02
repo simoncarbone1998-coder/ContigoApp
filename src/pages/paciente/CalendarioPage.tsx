@@ -7,6 +7,7 @@ import PatientVideoCall from '../../components/PatientVideoCall'
 import { specialtyLabel } from '../../lib/types'
 import { createDailyRoom, createDailyToken } from '../../services/dailyService'
 import type { Appointment, AvailabilitySlot } from '../../lib/types'
+import FeedbackModal from '../../components/FeedbackModal'
 
 function formatDate(d: string) {
   const [y, m, day] = d.split('-')
@@ -56,6 +57,10 @@ export default function PatientCalendarioPage() {
   const [rscError,         setRscError]         = useState<string | null>(null)
   const [calSuccess,       setCalSuccess]       = useState<string | null>(null)
 
+  // Feedback
+  const [feedbackAppt,   setFeedbackAppt]   = useState<Appointment | null>(null)
+  const [feedbackToast,  setFeedbackToast]  = useState<string | null>(null)
+
   const fetchAppointments = useCallback(async () => {
     if (!profile) return
     setLoading(true)
@@ -72,6 +77,38 @@ export default function PatientCalendarioPage() {
   }, [profile])
 
   useEffect(() => { fetchAppointments() }, [fetchAppointments])
+
+  const checkFeedbackNeeded = useCallback(async () => {
+    if (!profile) return
+    const { data } = await supabase
+      .from('appointments')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .select('*, doctor:doctor_id(id, full_name, specialty), slot:slot_id(date, start_time)')
+      .eq('patient_id', profile.id)
+      .eq('completed', true)
+      .eq('status', 'confirmed')
+      .order('completed_at', { ascending: false })
+      .limit(10)
+    if (!data?.length) return
+    const apptIds = data.map((a: any) => a.id)
+    const { data: existing } = await supabase
+      .from('appointment_feedback')
+      .select('appointment_id')
+      .in('appointment_id', apptIds)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const existingIds = new Set((existing ?? []).map((f: any) => f.appointment_id))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const appt of data as any[]) {
+      if (existingIds.has(appt.id)) continue
+      const key = `feedback_shown_${appt.id}`
+      if (sessionStorage.getItem(key)) continue
+      sessionStorage.setItem(key, '1')
+      setFeedbackAppt(appt as Appointment)
+      break
+    }
+  }, [profile])
+
+  useEffect(() => { checkFeedbackNeeded() }, [checkFeedbackNeeded])
 
   // Auto-create Daily rooms for appointments within 10 minutes
   useEffect(() => {
@@ -278,7 +315,7 @@ export default function PatientCalendarioPage() {
       <PatientVideoCall
         roomUrl={videoAppt.daily_room_url}
         token={videoToken}
-        onLeave={() => { setVideoAppt(null); setVideoToken(null); fetchAppointments() }}
+        onLeave={() => { setVideoAppt(null); setVideoToken(null); fetchAppointments(); checkFeedbackNeeded() }}
       />
     )
   }
@@ -300,6 +337,13 @@ export default function PatientCalendarioPage() {
               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
             </svg>
             {calSuccess}
+          </div>
+        )}
+
+        {feedbackToast && (
+          <div className="flex gap-3 p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-sm text-emerald-800"
+            style={{ animation: 'modal-in 0.2s ease-out' }}>
+            {feedbackToast}
           </div>
         )}
 
@@ -561,6 +605,20 @@ export default function PatientCalendarioPage() {
           </div>
         </div>
       )}
+      {/* ── Feedback modal ── */}
+      {feedbackAppt && profile && (
+        <FeedbackModal
+          appointment={feedbackAppt}
+          patientId={profile.id}
+          onClose={() => setFeedbackAppt(null)}
+          onSubmitted={() => {
+            setFeedbackAppt(null)
+            setFeedbackToast('¡Gracias por tu calificación! 🌟')
+            setTimeout(() => setFeedbackToast(null), 4000)
+          }}
+        />
+      )}
+
       {/* ── Reschedule modal ── */}
       {reschedulingAppt && (
         <div
