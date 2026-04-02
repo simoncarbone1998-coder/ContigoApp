@@ -45,6 +45,13 @@ export default function DoctorAgendaPage() {
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [formSuccess, setFormSuccess] = useState(false)
+  const [formMode, setFormMode] = useState<'specific' | 'recurring'>('specific')
+  // Recurring schedule
+  const [selectedDays,  setSelectedDays]  = useState<number[]>([])
+  const [recurWeeks,    setRecurWeeks]    = useState(2)
+  const [confirmSlots,  setConfirmSlots]  = useState<Array<{ date: string; start_time: string; end_time: string }> | null>(null)
+  const [confirming,    setConfirming]    = useState(false)
+  const [recurSuccessMsg, setRecurSuccessMsg] = useState<string | null>(null)
 
   // Calendar
   const today = new Date()
@@ -215,6 +222,76 @@ export default function DoctorAgendaPage() {
     const now = new Date()
     downloadICS(generateICS(events), now.getMonth(), now.getFullYear())
     setExporting(false)
+  }
+
+  const WEEKDAY_LABELS = ['L', 'M', 'X', 'J', 'V', 'S', 'D']
+  const WEEKDAY_NAMES  = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo']
+
+  function buildRecurringSlots() {
+    if (selectedDays.length === 0 || !startTime || !endTime || endTime <= startTime) return []
+    const nowMs = Date.now()
+    const base = new Date(); base.setHours(0, 0, 0, 0)
+    const endDate = new Date(base); endDate.setDate(endDate.getDate() + recurWeeks * 7)
+    const existingKeys = new Set(slots.map((s) => `${s.date}|${s.start_time}`))
+    const result: Array<{ date: string; start_time: string; end_time: string }> = []
+    const cur = new Date(base)
+    while (cur < endDate) {
+      const jsDay = cur.getDay()
+      const displayIdx = jsDay === 0 ? 6 : jsDay - 1
+      if (selectedDays.includes(displayIdx)) {
+        const dateStr = cur.toISOString().split('T')[0]
+        const generated = generateSlots(dateStr, startTime, endTime)
+        for (const slot of generated) {
+          if (new Date(`${dateStr}T${slot.start_time}`).getTime() <= nowMs) continue
+          if (existingKeys.has(`${dateStr}|${slot.start_time}`)) continue
+          result.push({ date: dateStr, start_time: slot.start_time, end_time: slot.end_time })
+        }
+      }
+      cur.setDate(cur.getDate() + 1)
+    }
+    return result
+  }
+
+  function handleAddRecurring(e: React.FormEvent) {
+    e.preventDefault()
+    setFormError(null)
+    setFormSuccess(false)
+    setRecurSuccessMsg(null)
+    if (selectedDays.length === 0) { setFormError('Selecciona al menos un día de la semana.'); return }
+    if (!startTime || !endTime) { setFormError('Completa los campos de hora.'); return }
+    if (endTime <= startTime) { setFormError('La hora fin debe ser posterior al inicio.'); return }
+    if (recurWeeks > 4) { setFormError('El máximo permitido es 4 semanas'); return }
+    const generated = buildRecurringSlots()
+    if (generated.length === 0) { setFormError('No se generarán horarios con los parámetros seleccionados.'); return }
+    setConfirmSlots(generated)
+  }
+
+  async function handleConfirmRecurring() {
+    if (!profile || !confirmSlots) return
+    setConfirming(true)
+    setFormError(null)
+    const rows = confirmSlots.map((s) => ({
+      doctor_id:  profile.id,
+      specialty:  profile.specialty,
+      date:       s.date,
+      start_time: s.start_time,
+      end_time:   s.end_time,
+      is_booked:  false,
+    }))
+    const { error: err } = await supabase.from('availability_slots').insert(rows)
+    setConfirming(false)
+    if (err) {
+      setFormError('No se pudieron crear los horarios. Intenta de nuevo.')
+      setConfirmSlots(null)
+    } else {
+      const count = confirmSlots.length
+      setConfirmSlots(null)
+      setSelectedDays([])
+      setStartTime('')
+      setEndTime('')
+      setRecurSuccessMsg(`✅ Se crearon ${count} slots exitosamente`)
+      await fetchData()
+    }
   }
 
   async function handleAddSlots(e: React.FormEvent) {
@@ -442,8 +519,27 @@ export default function DoctorAgendaPage() {
 
               {/* Add slot form */}
               <div className="bg-slate-50 rounded-xl border border-slate-100 p-5">
-                <h2 className="text-sm font-bold text-slate-900 mb-1">Agregar disponibilidad</h2>
-                <p className="text-xs text-slate-400 mb-4">Se generarán slots de 30 min en :00 y :30. El inicio se redondea al siguiente bloque.</p>
+                <h2 className="text-sm font-bold text-slate-900 mb-3">Agregar disponibilidad</h2>
+
+                {/* Mode toggle */}
+                <div className="flex gap-1 mb-4">
+                  {(['specific', 'recurring'] as const).map((mode) => (
+                    <button key={mode} type="button"
+                      onClick={() => { setFormMode(mode); setFormError(null); setFormSuccess(false); setRecurSuccessMsg(null) }}
+                      className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                        formMode === mode ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                      }`}>
+                      {mode === 'specific' ? 'Día específico' : 'Horario recurrente'}
+                    </button>
+                  ))}
+                </div>
+
+                {formMode === 'specific' && (
+                  <p className="text-xs text-slate-400 mb-4">Se generarán slots de 30 min en :00 y :30. El inicio se redondea al siguiente bloque.</p>
+                )}
+                {formMode === 'recurring' && (
+                  <p className="text-xs text-slate-400 mb-4">Genera horarios automáticamente para varios días a la vez.</p>
+                )}
 
                 {formError && (
                   <div className="mb-3 flex gap-2 p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700">
@@ -461,27 +557,114 @@ export default function DoctorAgendaPage() {
                     ¡Horarios agregados con éxito!
                   </div>
                 )}
-
-                <form onSubmit={handleAddSlots} className="grid sm:grid-cols-4 gap-3">
-                  {[
-                    { id: 'date',  label: 'Fecha',       type: 'date', value: date,      onChange: setDate,      min: todayStr },
-                    { id: 'start', label: 'Hora inicio',  type: 'time', value: startTime, onChange: setStartTime, min: date === todayStr ? nowTimeStr : undefined },
-                    { id: 'end',   label: 'Hora fin',     type: 'time', value: endTime,   onChange: setEndTime,   min: undefined },
-                  ].map((f) => (
-                    <div key={f.id}>
-                      <label htmlFor={f.id} className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{f.label}</label>
-                      <input id={f.id} type={f.type} value={f.value} onChange={(e) => f.onChange(e.target.value)}
-                        min={f.min}
-                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors bg-white" />
-                    </div>
-                  ))}
-                  <div className="flex items-end">
-                    <button type="submit" disabled={submitting}
-                      className="w-full px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-50 shadow-sm shadow-blue-100">
-                      {submitting ? '...' : 'Generar'}
-                    </button>
+                {recurSuccessMsg && (
+                  <div className="mb-3 flex gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800">
+                    <svg className="w-4 h-4 shrink-0 mt-0.5 text-emerald-500" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                    {recurSuccessMsg}
                   </div>
-                </form>
+                )}
+
+                {/* ── MODE 1: Día específico ── */}
+                {formMode === 'specific' && (
+                  <form onSubmit={handleAddSlots} className="grid sm:grid-cols-4 gap-3">
+                    {[
+                      { id: 'date',  label: 'Fecha',      type: 'date', value: date,      onChange: setDate,      min: todayStr },
+                      { id: 'start', label: 'Hora inicio', type: 'time', value: startTime, onChange: setStartTime, min: date === todayStr ? nowTimeStr : undefined },
+                      { id: 'end',   label: 'Hora fin',    type: 'time', value: endTime,   onChange: setEndTime,   min: undefined },
+                    ].map((f) => (
+                      <div key={f.id}>
+                        <label htmlFor={f.id} className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{f.label}</label>
+                        <input id={f.id} type={f.type} value={f.value} onChange={(e) => f.onChange(e.target.value)}
+                          min={f.min}
+                          className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors bg-white" />
+                      </div>
+                    ))}
+                    <div className="flex items-end">
+                      <button type="submit" disabled={submitting}
+                        className="w-full px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-50 shadow-sm shadow-blue-100">
+                        {submitting ? '...' : 'Generar'}
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {/* ── MODE 2: Horario recurrente ── */}
+                {formMode === 'recurring' && (
+                  <form onSubmit={handleAddRecurring} className="space-y-4">
+
+                    {/* Day of week selector */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Días de la semana</label>
+                      <div className="flex gap-1.5 flex-wrap">
+                        {WEEKDAY_LABELS.map((day, i) => (
+                          <button key={i} type="button"
+                            onClick={() => setSelectedDays((prev) =>
+                              prev.includes(i) ? prev.filter((d) => d !== i) : [...prev, i]
+                            )}
+                            className={`w-9 h-9 rounded-xl text-xs font-bold transition-colors ${
+                              selectedDays.includes(i)
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-white border border-slate-200 text-slate-600 hover:border-blue-300'
+                            }`}>
+                            {day}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Time range */}
+                    <div className="grid sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Hora inicio</label>
+                        <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)}
+                          className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors bg-white" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Hora fin</label>
+                        <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)}
+                          className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors bg-white" />
+                      </div>
+                    </div>
+
+                    {/* Weeks selector */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">¿Por cuántas semanas?</label>
+                      <div className="flex gap-2 flex-wrap">
+                        {[1, 2, 3, 4].map((w) => (
+                          <button key={w} type="button" onClick={() => setRecurWeeks(w)}
+                            className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                              recurWeeks === w
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-white border border-slate-200 text-slate-600 hover:border-blue-300'
+                            }`}>
+                            {w} semana{w > 1 ? 's' : ''}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Live preview */}
+                    {(() => {
+                      const preview = buildRecurringSlots()
+                      if (preview.length === 0) return null
+                      const [sy, sm, sd] = preview[0].date.split('-')
+                      const [ey, em, ed] = preview[preview.length - 1].date.split('-')
+                      return (
+                        <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl text-xs text-blue-800 leading-relaxed">
+                          Se crearán <strong>{preview.length} slots</strong> de 30 minutos<br />
+                          Del <strong>{sd}/{sm}/{sy}</strong> al <strong>{ed}/{em}/{ey}</strong>
+                        </div>
+                      )
+                    })()}
+
+                    <button type="submit"
+                      className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-colors shadow-sm shadow-blue-100">
+                      Revisar y confirmar
+                    </button>
+                  </form>
+                )}
               </div>
 
               {error && (
@@ -614,6 +797,38 @@ export default function DoctorAgendaPage() {
           )}
         </div>
       </main>
+
+      {/* ── Recurring schedule confirmation modal ── */}
+      {confirmSlots && (() => {
+        const [sy, sm, sd] = confirmSlots[0].date.split('-')
+        const [ey, em, ed] = confirmSlots[confirmSlots.length - 1].date.split('-')
+        const dayNames = [...selectedDays].sort((a, b) => a - b).map((d) => WEEKDAY_NAMES[d]).join(', ')
+        return (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 px-4"
+            style={{ animation: 'backdrop-in 0.15s ease-out' }}>
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-7"
+              style={{ animation: 'modal-in 0.2s ease-out' }}>
+              <h2 className="text-lg font-bold text-slate-900 mb-4">Confirmar horario recurrente</h2>
+              <p className="text-sm text-slate-700 leading-7 mb-6">
+                ¿Confirmas crear <strong>{confirmSlots.length} slots</strong> de 30 minutos<br />
+                los <strong>{dayNames}</strong><br />
+                del <strong>{sd}/{sm}/{sy}</strong> al <strong>{ed}/{em}/{ey}</strong><br />
+                de <strong>{startTime.slice(0, 5)}</strong> a <strong>{endTime.slice(0, 5)}</strong>?
+              </p>
+              <div className="flex gap-3">
+                <button onClick={() => setConfirmSlots(null)} disabled={confirming}
+                  className="flex-1 py-3 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50">
+                  Cancelar
+                </button>
+                <button onClick={handleConfirmRecurring} disabled={confirming}
+                  className="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors disabled:opacity-50">
+                  {confirming ? 'Creando...' : 'Confirmar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ── Slot detail modal ── */}
       {detailSlot && (() => {
