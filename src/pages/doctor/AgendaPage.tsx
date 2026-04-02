@@ -89,8 +89,11 @@ export default function DoctorAgendaPage() {
     if (!profile) return
     setLoading(true)
     setError(null)
+    const fetchTodayStr = new Date().toISOString().split('T')[0]
     const [sR, aR, hR] = await Promise.all([
-      supabase.from('availability_slots').select('*').eq('doctor_id', profile.id).order('date').order('start_time'),
+      supabase.from('availability_slots').select('*').eq('doctor_id', profile.id)
+        .gte('date', fetchTodayStr)
+        .order('date').order('start_time'),
       supabase.from('appointments')
         .select('*, patient:patient_id(id, full_name, email, phone, city, birth_date)')
         .eq('doctor_id', profile.id).eq('status', 'confirmed').eq('completed', false),
@@ -101,8 +104,19 @@ export default function DoctorAgendaPage() {
     ])
     if (sR.error || aR.error || hR.error) setError('No se pudo cargar la información.')
     else {
-      setSlots((sR.data ?? []) as AvailabilitySlot[])
-      setAppointments((aR.data ?? []) as Appointment[])
+      // Keep only future slots (today's past-time slots are excluded client-side)
+      const nowMs = Date.now()
+      const futureSlots = ((sR.data ?? []) as AvailabilitySlot[]).filter(
+        (s) => new Date(`${s.date}T${s.start_time}`).getTime() > nowMs
+      )
+      setSlots(futureSlots)
+
+      // Keep only appointments whose slot is still in the future
+      const futureSlotIds = new Set(futureSlots.map((s) => s.id))
+      setAppointments(
+        ((aR.data ?? []) as Appointment[]).filter((a) => futureSlotIds.has(a.slot_id))
+      )
+
       setHistory((hR.data ?? []) as Appointment[])
     }
     setLoading(false)
