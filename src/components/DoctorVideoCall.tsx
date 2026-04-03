@@ -3,6 +3,9 @@ import Daily from '@daily-co/daily-js'
 import { supabase } from '../lib/supabase'
 import { createTranscriptionSession } from '../services/deepgramService'
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let dailyCallInstance: any = null
+
 interface Props {
   roomUrl: string
   token: string
@@ -25,7 +28,6 @@ export default function DoctorVideoCall({
 }: Props) {
   // Daily.co
   const callRef       = useRef<ReturnType<typeof Daily.createCallObject> | null>(null)
-  const initialized   = useRef(false)
   const localVideoRef  = useRef<HTMLVideoElement>(null)
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
   const remoteAudioRef = useRef<HTMLAudioElement>(null)
@@ -90,41 +92,45 @@ export default function DoctorVideoCall({
   }, [appointmentId])
 
   useEffect(() => {
-    if (initialized.current) return
-    initialized.current = true
-
-    const existing = Daily.getCallInstance()
-    if (existing) existing.destroy()
-
-    const call = Daily.createCallObject()
-    callRef.current = call
-    const session = sessionRef.current
-
-    call.on('participant-updated', (ev) => {
-      if (!ev) return
-      const p = ev.participant
-      const videoTrack = p.tracks.video?.persistentTrack
-      const audioTrack = p.tracks.audio?.persistentTrack
-
-      if (p.local) {
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = videoTrack ? new MediaStream([videoTrack]) : null
+    const timer = setTimeout(async () => {
+      try {
+        // Destroy any existing instance before creating a new one
+        if (dailyCallInstance) {
+          try { await dailyCallInstance.leave() } catch { /* ignore */ }
+          try { dailyCallInstance.destroy() } catch { /* ignore */ }
+          dailyCallInstance = null
         }
-      } else {
-        if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = videoTrack ? new MediaStream([videoTrack]) : null
-        }
-        if (remoteAudioRef.current) {
-          remoteAudioRef.current.srcObject = audioTrack ? new MediaStream([audioTrack]) : null
-        }
-        if (audioTrack) {
-          session.addRemote(new MediaStream([audioTrack]), setTranscript)
-        }
-      }
-    })
 
-    call.join({ url: roomUrl, token })
-      .then(async () => {
+        const call = Daily.createCallObject()
+        dailyCallInstance = call
+        callRef.current = call
+        const session = sessionRef.current
+
+        call.on('participant-updated', (ev) => {
+          if (!ev) return
+          const p = ev.participant
+          const videoTrack = p.tracks.video?.persistentTrack
+          const audioTrack = p.tracks.audio?.persistentTrack
+
+          if (p.local) {
+            if (localVideoRef.current) {
+              localVideoRef.current.srcObject = videoTrack ? new MediaStream([videoTrack]) : null
+            }
+          } else {
+            if (remoteVideoRef.current) {
+              remoteVideoRef.current.srcObject = videoTrack ? new MediaStream([videoTrack]) : null
+            }
+            if (remoteAudioRef.current) {
+              remoteAudioRef.current.srcObject = audioTrack ? new MediaStream([audioTrack]) : null
+            }
+            if (audioTrack) {
+              session.addRemote(new MediaStream([audioTrack]), setTranscript)
+            }
+          }
+        })
+
+        await call.join({ url: roomUrl, token })
+
         try {
           const localMic = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
           localMicRef.current = localMic
@@ -132,28 +138,30 @@ export default function DoctorVideoCall({
         } catch {
           // Mic access for Deepgram failed — video call continues
         }
-      })
-      .catch(() => {
-        setError('Por favor permite el acceso a tu cámara y micrófono para iniciar la consulta.')
-      })
+      } catch (err) {
+        console.error('Daily.co init error:', err)
+        setError('No se pudo iniciar la videollamada. Por favor recarga la página.')
+      }
+    }, 100)
 
     return () => {
-      initialized.current = false
-      session.stop()
+      clearTimeout(timer)
+      sessionRef.current.stop()
       localMicRef.current?.getTracks().forEach((t) => t.stop())
-      if (callRef.current) {
-        callRef.current.leave().finally(() => { callRef.current?.destroy() })
-        callRef.current = null
+      if (dailyCallInstance) {
+        try { dailyCallInstance.leave().finally(() => { dailyCallInstance?.destroy(); dailyCallInstance = null }) } catch { /* ignore */ }
       }
+      callRef.current = null
     }
   }, [roomUrl, token])
 
   async function handleEndCall() {
-    if (callRef.current) {
-      callRef.current.leave()
-      callRef.current.destroy()
-      callRef.current = null
+    if (dailyCallInstance) {
+      try { await dailyCallInstance.leave() } catch { /* ignore */ }
+      try { dailyCallInstance.destroy() } catch { /* ignore */ }
+      dailyCallInstance = null
     }
+    callRef.current = null
     const session = sessionRef.current
     session.stop()
     localMicRef.current?.getTracks().forEach((t) => t.stop())
