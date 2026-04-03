@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import RequireRole from './components/RequireRole'
+import InstallPrompt from './components/InstallPrompt'
 import LandingPage  from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
 import RegistroPage from './pages/RegistroPage'
@@ -57,5 +58,6 @@ export default function App() {
 
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
+    <InstallPrompt />
   )
 }
