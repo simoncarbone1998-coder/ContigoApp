@@ -230,7 +230,14 @@ export default function PatientPerfilPage() {
               <div className="w-7 h-7 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin" />
             </div>
           ) : history.length === 0 ? (
-            <p className="text-slate-500 text-sm text-center py-8">No tienes citas en tu historial.</p>
+            <div className="flex flex-col items-center py-12 text-center gap-3">
+              <svg className="w-12 h-12 text-slate-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                  d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              <p className="text-slate-500 text-sm font-medium">Aún no tienes consultas en tu historia médica</p>
+              <p className="text-xs text-slate-400">Aquí aparecerán tus consultas completadas.</p>
+            </div>
           ) : (
             <>
             {feedbackToast && (
@@ -242,44 +249,54 @@ export default function PatientPerfilPage() {
             <ul className="space-y-2.5">
               {history.map((appt) => {
                 const fb = feedbacks[appt.id]
+                const noAtendida = appt.summary === 'Cita no atendida - cerrada automáticamente'
                 return (
                   <li key={appt.id}>
-                    <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 hover:border-blue-200 transition-colors">
-                      <button
-                        onClick={() => setSelected(appt)}
-                        className="w-full text-left"
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
+                    <div
+                      className="p-4 rounded-xl bg-slate-50 border border-slate-100 hover:border-blue-200 hover:bg-blue-50/20 transition-all cursor-pointer group"
+                      onClick={() => setSelected(appt)}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap mb-1">
                             <p className="text-sm font-semibold text-slate-900">
                               Dr(a). {appt.doctor?.full_name ?? '—'}
                             </p>
-                            <p className="text-xs text-slate-500 mt-0.5">
-                              {appt.slot ? `${formatDate(appt.slot.date)} · ${formatTime(appt.slot.start_time)}` : '—'}
-                            </p>
+                            {noAtendida ? (
+                              <span className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 border border-orange-200">
+                                No atendida
+                              </span>
+                            ) : (
+                              <span className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                                {specialtyLabel(appt.doctor?.specialty)}
+                              </span>
+                            )}
                           </div>
-                          <span className="shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full border bg-blue-50 text-blue-700 border-blue-200">
-                            {specialtyLabel(appt.doctor?.specialty)}
-                          </span>
+                          <p className="text-xs text-slate-500">
+                            {appt.slot ? `${formatDate(appt.slot.date)} · ${formatTime(appt.slot.start_time)}` : '—'}
+                          </p>
+                          {fb && (
+                            <div className="mt-1.5">
+                              <StarsDisplay rating={fb.rating} />
+                            </div>
+                          )}
                         </div>
-                      </button>
+                        <svg className="w-4 h-4 text-slate-300 group-hover:text-blue-400 shrink-0 mt-0.5 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </div>
 
-                      {/* Feedback row */}
-                      <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center gap-2">
-                        {fb ? (
-                          <>
-                            <StarsDisplay rating={fb.rating} />
-                            <span className="text-xs text-slate-500">Calificación enviada ✓</span>
-                          </>
-                        ) : (
+                      {/* Feedback row — only if not rated and not noAtendida */}
+                      {!fb && !noAtendida && (
+                        <div className="mt-3 pt-2.5 border-t border-slate-100">
                           <button
-                            onClick={() => setFeedbackAppt(appt)}
+                            onClick={(e) => { e.stopPropagation(); setFeedbackAppt(appt) }}
                             className="text-xs text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1 transition-colors"
                           >
                             ⭐ Calificar consulta
                           </button>
-                        )}
-                      </div>
+                        </div>
+                      )}
                     </div>
                   </li>
                 )
@@ -306,103 +323,167 @@ export default function PatientPerfilPage() {
       )}
 
       {/* Appointment detail modal */}
-      {selected && (
-        <div
-          className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 px-4"
-          style={{ animation: 'backdrop-in 0.15s ease-out' }}
-          onClick={(e) => { if (e.target === e.currentTarget) setSelected(null) }}
-        >
+      {selected && (() => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const medItems: { medicine_name: string; dose: string; instructions: string }[] = (selected as any).prescriptions?.[0]?.prescription_items ?? []
+        const noAtendida = selected.summary === 'Cita no atendida - cerrada automáticamente'
+        const fb = feedbacks[selected.id]
+        const docInitials = (selected.doctor?.full_name ?? 'D')[0].toUpperCase()
+        return (
           <div
-            className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-7"
-            style={{ animation: 'modal-in 0.2s ease-out' }}
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 px-4"
+            style={{ animation: 'backdrop-in 0.15s ease-out' }}
+            onClick={(e) => { if (e.target === e.currentTarget) setSelected(null) }}
           >
-            <div className="flex items-start justify-between mb-5">
-              <div>
-                <h2 className="text-lg font-bold text-slate-900">Detalle de cita</h2>
-                <p className="text-sm text-slate-500 mt-0.5">
-                  {selected.slot ? `${formatDate(selected.slot.date)} · ${formatTime(selected.slot.start_time)} – ${formatTime(selected.slot.end_time)}` : '—'}
-                </p>
-              </div>
-              <button onClick={() => setSelected(null)}
-                className="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors flex items-center justify-center" aria-label="Cerrar">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <InfoRow label="Médico" value={`Dr(a). ${selected.doctor?.full_name ?? '—'}`} />
-              <InfoRow label="Especialización" value={specialtyLabel(selected.doctor?.specialty)} />
-              <InfoRow label="Motivo de consulta" value={selected.reason ?? 'No especificado'} />
-              <div>
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Conclusión del médico</p>
-                <p className="text-sm text-slate-700 bg-slate-50 border border-slate-100 rounded-xl px-3.5 py-3 leading-relaxed">
-                  {selected.summary ?? 'El médico no escribió una conclusión.'}
-                </p>
-              </div>
-
-              {/* Medications from prescription */}
-              {(() => {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const items = (selected as any).prescriptions?.[0]?.prescription_items ?? []
-                if (items.length === 0) return null
-                return (
+            <div
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-y-auto"
+              style={{ animation: 'modal-in 0.2s ease-out', maxHeight: '90vh' }}
+            >
+              {/* Header */}
+              <div className="flex items-start justify-between px-7 pt-7 pb-5">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl" aria-hidden="true">📋</span>
                   <div>
-                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Medicamentos recetados</p>
-                    <div className="space-y-2">
-                      {items.map((item: { medicine_name: string; dose: string; instructions: string }, i: number) => (
-                        <div key={i} className="p-3 bg-blue-50 border border-blue-100 rounded-xl">
-                          <p className="text-sm font-semibold text-slate-900">{item.medicine_name}</p>
-                          <p className="text-xs text-slate-600 mt-0.5">{item.dose} · {item.instructions}</p>
-                        </div>
-                      ))}
-                    </div>
+                    <h2 className="text-lg font-bold text-slate-900">Consulta Médica</h2>
+                    <p className="text-sm text-slate-500 mt-0.5">
+                      {selected.slot
+                        ? `${formatDate(selected.slot.date)} · ${formatTime(selected.slot.start_time)} – ${formatTime(selected.slot.end_time)}`
+                        : '—'}
+                    </p>
                   </div>
-                )
-              })()}
-            </div>
-
-            {/* Feedback section in detail modal */}
-            <div className="pt-4 border-t border-slate-100">
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Tu calificación</p>
-              {feedbacks[selected.id] ? (
-                <div className="space-y-1.5">
-                  <StarsDisplay rating={feedbacks[selected.id].rating} />
-                  {feedbacks[selected.id].comment && (
-                    <p className="text-xs text-slate-500 italic">"{feedbacks[selected.id].comment}"</p>
-                  )}
-                  <p className="text-xs text-slate-400">Calificación enviada ✓</p>
                 </div>
-              ) : (
-                <button
-                  onClick={() => { setSelected(null); setFeedbackAppt(selected) }}
-                  className="text-sm text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1.5 transition-colors"
-                >
-                  ⭐ Calificar esta consulta
+                <button onClick={() => setSelected(null)}
+                  className="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors flex items-center justify-center shrink-0" aria-label="Cerrar">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
                 </button>
-              )}
+              </div>
+
+              <div className="px-7 pb-7 space-y-5">
+                {/* Doctor card */}
+                <div className="flex items-center gap-3 p-3.5 bg-slate-50 border border-slate-100 rounded-2xl">
+                  {selected.doctor?.avatar_url ? (
+                    <img src={selected.doctor.avatar_url} alt="" className="w-10 h-10 rounded-full object-cover shrink-0" />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
+                      <span className="text-blue-700 text-sm font-bold">{docInitials}</span>
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-slate-900">Dr(a). {selected.doctor?.full_name ?? '—'}</p>
+                    <p className="text-xs text-slate-500">{specialtyLabel(selected.doctor?.specialty)}</p>
+                  </div>
+                  {noAtendida && (
+                    <span className="shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full bg-orange-100 text-orange-700 border border-orange-200">
+                      No atendida
+                    </span>
+                  )}
+                </div>
+
+                {/* Motivo */}
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-base" aria-hidden="true">📝</span>
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Motivo de la consulta</p>
+                  </div>
+                  <p className="text-sm text-slate-700 leading-relaxed pl-1">
+                    {selected.reason ?? <span className="text-slate-400 italic">No especificado</span>}
+                  </p>
+                </div>
+
+                <div className="border-t border-slate-100" />
+
+                {/* Resumen médico */}
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-base" aria-hidden="true">🩺</span>
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Resumen médico</p>
+                  </div>
+                  {noAtendida ? (
+                    <div className="flex items-start gap-3 p-3.5 bg-orange-50 border border-orange-200 rounded-xl">
+                      <svg className="w-5 h-5 text-orange-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                      </svg>
+                      <div>
+                        <p className="text-sm font-semibold text-orange-800">Esta cita no fue atendida</p>
+                        <p className="text-xs text-orange-600 mt-0.5">La consulta fue cerrada automáticamente.</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-700 bg-slate-50 border border-slate-100 rounded-xl px-3.5 py-3 leading-relaxed">
+                      {selected.summary ?? <span className="text-slate-400 italic">El médico no escribió una conclusión.</span>}
+                    </p>
+                  )}
+                </div>
+
+                {/* Medications */}
+                {medItems.length > 0 && (
+                  <>
+                    <div className="border-t border-slate-100" />
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="text-base" aria-hidden="true">💊</span>
+                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Medicamentos recetados</p>
+                      </div>
+                      <ul className="space-y-2.5">
+                        {medItems.map((item, i) => (
+                          <li key={i} className="flex items-start gap-2.5 text-sm">
+                            <span className="text-blue-400 font-bold mt-0.5 shrink-0">•</span>
+                            <div>
+                              <span className="font-semibold text-slate-900">{item.medicine_name}</span>
+                              <span className="text-slate-500"> — {item.dose}</span>
+                              {item.instructions && <p className="text-xs text-slate-400 mt-0.5">{item.instructions}</p>}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </>
+                )}
+
+                {/* Rating */}
+                {!noAtendida && (
+                  <>
+                    <div className="border-t border-slate-100" />
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-base" aria-hidden="true">⭐</span>
+                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Tu calificación</p>
+                      </div>
+                      {fb ? (
+                        <div className="space-y-1.5">
+                          <StarsDisplay rating={fb.rating} />
+                          {fb.comment && (
+                            <p className="text-xs text-slate-500 italic">"{fb.comment}"</p>
+                          )}
+                          <p className="text-xs text-slate-400">Calificación enviada ✓</p>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => { setSelected(null); setFeedbackAppt(selected) }}
+                          className="text-sm text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1.5 transition-colors"
+                        >
+                          ⭐ Calificar esta consulta
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                <button onClick={() => setSelected(null)}
+                  className="w-full py-3 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
+                  Cerrar
+                </button>
+              </div>
             </div>
-
-            <button onClick={() => setSelected(null)}
-              className="mt-6 w-full py-3 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
-              Cerrar
-            </button>
           </div>
-        </div>
-      )}
+        )
+      })()}
     </div>
   )
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">{label}</p>
-      <p className="text-sm font-medium text-slate-800">{value}</p>
-    </div>
-  )
-}
 
 function StarsDisplay({ rating }: { rating: number }) {
   return (
