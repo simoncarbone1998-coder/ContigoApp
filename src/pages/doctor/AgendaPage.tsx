@@ -77,6 +77,12 @@ export default function DoctorAgendaPage() {
   // History modal
   const [historyAppt, setHistoryAppt] = useState<Appointment | null>(null)
 
+  // Diagnostic data for selected booked-slot appointment
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [slotDiagFiles,  setSlotDiagFiles]  = useState<any[]>([])
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [slotDiagOrders, setSlotDiagOrders] = useState<any[]>([])
+
   // Video call
   const [videoAppt,    setVideoAppt]    = useState<Appointment | null>(null)
   const [videoToken,   setVideoToken]   = useState<string | null>(null)
@@ -130,6 +136,27 @@ export default function DoctorAgendaPage() {
   }, [profile])
 
   useEffect(() => { fetchData() }, [fetchData])
+
+  // Fetch diagnostic data when a booked slot is opened
+  useEffect(() => {
+    if (!detailSlot) { setSlotDiagFiles([]); setSlotDiagOrders([]); return }
+    const appt = appointments.find((a) => a.slot_id === detailSlot.id)
+    if (!appt) { setSlotDiagFiles([]); setSlotDiagOrders([]); return }
+    Promise.all([
+      supabase.from('diagnostic_files')
+        .select('id, file_name, file_url, stage, uploaded_at')
+        .eq('appointment_id', appt.id)
+        .eq('stage', 'pre_appointment')
+        .order('uploaded_at', { ascending: true }),
+      supabase.from('diagnostic_orders')
+        .select('id, exam_type, status, notes')
+        .eq('appointment_id', appt.id)
+        .eq('status', 'completed'),
+    ]).then(([filesRes, ordersRes]) => {
+      setSlotDiagFiles(filesRes.data ?? [])
+      setSlotDiagOrders(ordersRes.data ?? [])
+    })
+  }, [detailSlot, appointments])
 
   // Auto-create Daily rooms for appointments within 10 minutes
   useEffect(() => {
@@ -882,6 +909,41 @@ export default function DoctorAgendaPage() {
                   >
                     📅 Agregar a Google Calendar →
                   </a>
+
+                  {/* Pre-appointment documents */}
+                  <div className="p-3.5 bg-slate-50 border border-slate-100 rounded-xl space-y-2">
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Documentos previos del paciente</p>
+                    {slotDiagFiles.length === 0 ? (
+                      <p className="text-xs text-slate-400">El paciente no adjuntó documentos previos.</p>
+                    ) : (
+                      <ul className="space-y-1.5">
+                        {slotDiagFiles.map((f: any) => (
+                          <li key={f.id} className="flex items-center justify-between gap-2 text-xs">
+                            <span className="text-slate-700 truncate flex-1">📄 {f.file_name}</span>
+                            <a href={f.file_url} target="_blank" rel="noopener noreferrer"
+                              className="shrink-0 text-blue-600 hover:text-blue-800 font-semibold transition-colors">
+                              Ver →
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+
+                  {/* Completed exam results */}
+                  {slotDiagOrders.length > 0 && (
+                    <div className="p-3.5 bg-emerald-50 border border-emerald-100 rounded-xl space-y-2">
+                      <p className="text-xs font-bold text-emerald-700 uppercase tracking-wide">🔬 Resultados de exámenes</p>
+                      <ul className="space-y-1.5">
+                        {slotDiagOrders.map((o: any) => (
+                          <li key={o.id} className="flex items-center justify-between gap-2 text-xs">
+                            <span className="text-slate-700 flex-1">{o.exam_type}</span>
+                            <span className="text-emerald-700 font-semibold shrink-0">Resultado subido ✓</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
 
                   {/* Summary */}
                   <div>

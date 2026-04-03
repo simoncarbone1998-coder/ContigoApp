@@ -46,6 +46,12 @@ export default function PatientPerfilPage() {
   const [feedbackAppt,  setFeedbackAppt]  = useState<Appointment | null>(null)
   const [feedbackToast, setFeedbackToast] = useState<string | null>(null)
 
+  // Diagnostic data for selected appointment modal
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [selectedDiagOrders, setSelectedDiagOrders] = useState<any[]>([])
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [selectedDiagFiles,  setSelectedDiagFiles]  = useState<any[]>([])
+
   const fetchHistory = useCallback(async () => {
     if (!profile) return
     setLoadingH(true)
@@ -78,6 +84,25 @@ export default function PatientPerfilPage() {
   }, [profile])
 
   useEffect(() => { fetchHistory() }, [fetchHistory])
+
+  // Fetch diagnostic data when an appointment is selected in the modal
+  useEffect(() => {
+    if (!selected) { setSelectedDiagOrders([]); setSelectedDiagFiles([]); return }
+    Promise.all([
+      supabase.from('diagnostic_orders')
+        .select('id, exam_type, status, notes, created_at')
+        .eq('appointment_id', selected.id)
+        .order('created_at', { ascending: true }),
+      supabase.from('diagnostic_files')
+        .select('id, file_name, file_url, stage, uploaded_at')
+        .eq('appointment_id', selected.id)
+        .in('stage', ['pre_appointment', 'during_call'])
+        .order('uploaded_at', { ascending: true }),
+    ]).then(([ordersRes, filesRes]) => {
+      setSelectedDiagOrders(ordersRes.data ?? [])
+      setSelectedDiagFiles(filesRes.data ?? [])
+    })
+  }, [selected])
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
@@ -435,6 +460,68 @@ export default function PatientPerfilPage() {
                               <span className="text-slate-500"> — {item.dose}</span>
                               {item.instructions && <p className="text-xs text-slate-400 mt-0.5">{item.instructions}</p>}
                             </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </>
+                )}
+
+                {/* Diagnostic orders */}
+                {selectedDiagOrders.length > 0 && (
+                  <>
+                    <div className="border-t border-slate-100" />
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="text-base" aria-hidden="true">🔬</span>
+                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Exámenes ordenados</p>
+                      </div>
+                      <ul className="space-y-2">
+                        {selectedDiagOrders.map((order: any) => (
+                          <li key={order.id} className="flex items-start justify-between gap-3 text-sm">
+                            <span className="text-slate-800 font-medium">{order.exam_type}</span>
+                            <span className={`shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full ${
+                              order.status === 'completed'
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : order.status === 'scheduled'
+                                ? 'bg-blue-100 text-blue-700'
+                                : 'bg-orange-100 text-orange-700'
+                            }`}>
+                              {order.status === 'completed' ? 'Completado ✓' : order.status === 'scheduled' ? 'Agendado' : 'Pendiente'}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </>
+                )}
+
+                {/* Shared diagnostic files */}
+                {selectedDiagFiles.length > 0 && (
+                  <>
+                    <div className="border-t border-slate-100" />
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="text-base" aria-hidden="true">📎</span>
+                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Archivos compartidos</p>
+                      </div>
+                      <ul className="space-y-2">
+                        {selectedDiagFiles.map((file: any) => (
+                          <li key={file.id} className="flex items-center justify-between gap-3 text-sm">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-slate-800 truncate">{file.file_name}</p>
+                              <p className="text-xs text-slate-400">
+                                {file.stage === 'pre_appointment' ? 'Previo a la cita' : 'Durante la consulta'}
+                              </p>
+                            </div>
+                            <a
+                              href={file.file_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="shrink-0 text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors"
+                            >
+                              Ver →
+                            </a>
                           </li>
                         ))}
                       </ul>

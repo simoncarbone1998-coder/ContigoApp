@@ -9,6 +9,7 @@ import PatientPerfilPage    from './pages/paciente/PerfilPage'
 import PatientAgendarPage   from './pages/paciente/AgendarPage'
 import PatientCalendarioPage from './pages/paciente/CalendarioPage'
 import PatientPastillasPage  from './pages/paciente/PastillasPage'
+import PatientExamenesPage   from './pages/paciente/ExamenesPage'
 
 // Doctor pages
 import DoctorSetupPage   from './pages/doctor/SetupEspecialidadPage'
@@ -33,6 +34,7 @@ export default function App() {
         <Route path="/paciente/agendar"     element={<PatientAgendarPage />} />
         <Route path="/paciente/calendario"  element={<PatientCalendarioPage />} />
         <Route path="/paciente/pastillas"   element={<PatientPastillasPage />} />
+        <Route path="/paciente/examenes"    element={<PatientExamenesPage />} />
         {/* Legacy redirect */}
         <Route path="/paciente/dashboard"   element={<Navigate to="/paciente/perfil" replace />} />
         <Route path="/paciente/nueva-cita"  element={<Navigate to="/paciente/agendar" replace />} />

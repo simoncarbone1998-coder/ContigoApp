@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import Daily from '@daily-co/daily-js'
+import { supabase } from '../lib/supabase'
 import { createTranscriptionSession } from '../services/deepgramService'
 
 interface Props {
   roomUrl: string
   token: string
+  appointmentId: string
+  patientId: string
   onLeave: () => void
 }
 
-export default function PatientVideoCall({ roomUrl, token, onLeave }: Props) {
+export default function PatientVideoCall({ roomUrl, token, appointmentId, patientId, onLeave }: Props) {
   const callRef        = useRef<ReturnType<typeof Daily.createCallObject> | null>(null)
   const initialized    = useRef(false)
   const localMicRef    = useRef<MediaStream | null>(null)
@@ -16,6 +19,7 @@ export default function PatientVideoCall({ roomUrl, token, onLeave }: Props) {
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
   const remoteAudioRef = useRef<HTMLAudioElement>(null)
   const transcriptRef  = useRef<HTMLDivElement>(null)
+  const duringFileRef  = useRef<HTMLInputElement>(null)
 
   const sessionRef = useRef(createTranscriptionSession())
 
@@ -23,6 +27,10 @@ export default function PatientVideoCall({ roomUrl, token, onLeave }: Props) {
   const [camOff,     setCamOff]     = useState(false)
   const [error,      setError]      = useState<string | null>(null)
   const [transcript, setTranscript] = useState('')
+
+  // During-call file uploads
+  const [duringFiles,    setDuringFiles]    = useState<{ name: string }[]>([])
+  const [uploadingDuring, setUploadingDuring] = useState(false)
 
   // Auto-scroll transcript
   useEffect(() => {
@@ -70,7 +78,6 @@ export default function PatientVideoCall({ roomUrl, token, onLeave }: Props) {
         try {
           const localMic = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
           localMicRef.current = localMic
-          // Patient mic → label as Paciente
           session.startLocal(localMic, setTranscript)
         } catch {
           // No mic for Deepgram — video call continues
@@ -99,6 +106,34 @@ export default function PatientVideoCall({ roomUrl, token, onLeave }: Props) {
     localMicRef.current?.getTracks().forEach((t) => t.stop())
     callRef.current?.leave()
     onLeave()
+  }
+
+  async function handleDuringFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 10 * 1024 * 1024) return  // silently skip oversized
+    setUploadingDuring(true)
+    e.target.value = ''
+
+    const ext  = file.name.split('.').pop()
+    const path = `during/${patientId}/${appointmentId}/${Date.now()}.${ext}`
+    const { error: upErr } = await supabase.storage
+      .from('diagnostic-files')
+      .upload(path, file, { upsert: true })
+
+    if (!upErr) {
+      const { data: { publicUrl } } = supabase.storage.from('diagnostic-files').getPublicUrl(path)
+      await supabase.from('diagnostic_files').insert({
+        appointment_id: appointmentId,
+        patient_id:     patientId,
+        file_url:       publicUrl,
+        file_name:      file.name,
+        file_size:      `${(file.size / 1024).toFixed(0)} KB`,
+        stage:          'during_call',
+      })
+      setDuringFiles((prev) => [...prev, { name: file.name }])
+    }
+    setUploadingDuring(false)
   }
 
   return (
@@ -146,8 +181,8 @@ export default function PatientVideoCall({ roomUrl, token, onLeave }: Props) {
         </div>
       </div>
 
-      {/* ── Right: Transcript panel ── */}
-      <div className="w-full md:w-[300px] bg-white flex flex-col overflow-hidden border-t md:border-t-0 md:border-l border-slate-200 max-h-[35vh] md:max-h-none">
+      {/* ── Right: Transcript + file upload panel ── */}
+      <div className="w-full md:w-[300px] bg-white flex flex-col overflow-hidden border-t md:border-t-0 md:border-l border-slate-200 max-h-[40vh] md:max-h-none">
         <div className="px-4 py-3 border-b border-slate-100 shrink-0 flex items-center justify-between">
           <h2 className="text-sm font-bold text-slate-900">📝 Transcripción</h2>
           <span className="flex items-center gap-1.5 text-xs font-semibold text-red-500">
@@ -165,6 +200,31 @@ export default function PatientVideoCall({ roomUrl, token, onLeave }: Props) {
               La transcripción aparecerá aquí mientras hablan...
             </span>
           )}
+        </div>
+
+        {/* File upload section */}
+        <div className="px-4 py-3 border-t border-slate-100 shrink-0 space-y-2">
+          <button
+            onClick={() => duringFileRef.current?.click()}
+            disabled={uploadingDuring}
+            className="w-full flex items-center justify-center gap-2 py-2 rounded-xl border border-dashed border-blue-200 text-xs font-semibold text-blue-600 hover:bg-blue-50 hover:border-blue-300 transition-colors disabled:opacity-50"
+          >
+            {uploadingDuring ? (
+              <><div className="w-3 h-3 border border-blue-300 border-t-blue-600 rounded-full animate-spin" /> Subiendo...</>
+            ) : (
+              <>📎 Subir examen durante consulta</>
+            )}
+          </button>
+          <input
+            ref={duringFileRef}
+            type="file"
+            accept="application/pdf,image/jpeg,image/jpg,image/png"
+            className="hidden"
+            onChange={handleDuringFileChange}
+          />
+          {duringFiles.map((f, i) => (
+            <p key={i} className="text-xs text-emerald-700 truncate">✅ {f.name} enviado al doctor</p>
+          ))}
         </div>
       </div>
     </div>

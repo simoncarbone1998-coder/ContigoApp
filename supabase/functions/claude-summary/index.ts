@@ -23,7 +23,7 @@ Deno.serve(async (req) => {
 
     // Empty transcript — return empty fields
     if (!transcript?.trim()) {
-      return json({ resumen: '', medicamentos: [] })
+      return json({ resumen: '', medicamentos: [], examenes: [] })
     }
 
     const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY })
@@ -42,10 +42,17 @@ Responde ÚNICAMENTE con este JSON válido (sin texto adicional, sin markdown, s
       "dose": "dosis",
       "instructions": "instrucciones de uso"
     }
+  ],
+  "examenes": [
+    {
+      "exam_type": "nombre del examen diagnóstico",
+      "notes": "instrucciones adicionales para el examen"
+    }
   ]
 }
 
 Si no se mencionaron medicamentos, usa un array vacío: "medicamentos": []
+Si no se mencionaron exámenes diagnósticos, usa un array vacío: "examenes": []
 Si la transcripción es insuficiente, genera un resumen genérico breve.`,
       messages: [{ role: 'user', content: transcript }],
     })
@@ -58,15 +65,19 @@ Si la transcripción es insuficiente, genera un resumen genérico breve.`,
       .replace(/\s*```\s*$/, '')
       .trim()
 
-    let result: { resumen: string; medicamentos: { medicine_name: string; dose: string; instructions: string }[] }
+    let result: {
+      resumen: string
+      medicamentos: { medicine_name: string; dose: string; instructions: string }[]
+      examenes: { exam_type: string; notes: string }[]
+    }
 
     try {
       result = JSON.parse(cleaned)
     } catch {
-      // Parsing failed — return empty so doctor fills manually
       return json({
         resumen: '',
         medicamentos: [],
+        examenes: [],
         warning: 'No se pudo parsear la respuesta de IA.',
       })
     }
@@ -74,8 +85,9 @@ Si la transcripción es insuficiente, genera un resumen genérico breve.`,
     return json({
       resumen:      result.resumen      ?? '',
       medicamentos: result.medicamentos ?? [],
+      examenes:     result.examenes     ?? [],
     })
   } catch (err) {
-    return json({ error: String(err), resumen: '', medicamentos: [] }, 500)
+    return json({ error: String(err), resumen: '', medicamentos: [], examenes: [] }, 500)
   }
 })

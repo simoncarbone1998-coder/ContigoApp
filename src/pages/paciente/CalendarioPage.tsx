@@ -315,6 +315,8 @@ export default function PatientCalendarioPage() {
       <PatientVideoCall
         roomUrl={videoAppt.daily_room_url}
         token={videoToken}
+        appointmentId={videoAppt.id}
+        patientId={profile?.id ?? ''}
         onLeave={() => { setVideoAppt(null); setVideoToken(null); fetchAppointments(); checkFeedbackNeeded() }}
       />
     )

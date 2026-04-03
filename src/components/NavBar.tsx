@@ -9,6 +9,7 @@ const roleLinks: Record<Role, { to: string; label: string }[]> = {
     { to: '/paciente/agendar',    label: 'Agendar Cita' },
     { to: '/paciente/calendario', label: 'Calendario' },
     { to: '/paciente/pastillas',  label: 'Pastillas' },
+    { to: '/paciente/examenes',   label: 'Exámenes' },
   ],
   doctor: [
     { to: '/doctor/perfil',    label: 'Mi Perfil' },

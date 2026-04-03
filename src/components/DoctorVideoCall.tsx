@@ -14,8 +14,11 @@ interface Props {
 }
 
 type Phase = 'calling' | 'processing' | 'review' | 'done'
-type MedRow = { medicine_name: string; dose: string; instructions: string }
-const emptyMed = (): MedRow => ({ medicine_name: '', dose: '', instructions: '' })
+type MedRow  = { medicine_name: string; dose: string; instructions: string }
+type ExamRow = { exam_type: string; notes: string }
+
+const emptyMed  = (): MedRow  => ({ medicine_name: '', dose: '', instructions: '' })
+const emptyExam = (): ExamRow => ({ exam_type: '', notes: '' })
 
 export default function DoctorVideoCall({
   roomUrl, token, appointmentId, doctorId, patientId, onComplete, onLeave,
@@ -37,14 +40,19 @@ export default function DoctorVideoCall({
   const [camOff, setCamOff] = useState(false)
   const [error,  setError]  = useState<string | null>(null)
 
-  // Transcript display
+  // Transcript
   const [transcript, setTranscript] = useState('')
   const transcriptRef = useRef<HTMLDivElement>(null)
+
+  // Realtime: patient files shared during call
+  const [sharedFiles, setSharedFiles] = useState<{ name: string; url: string }[]>([])
 
   // Review form
   const [summary,   setSummary]   = useState('')
   const [meds,      setMeds]      = useState<MedRow[]>([emptyMed()])
   const [noMeds,    setNoMeds]    = useState(false)
+  const [exams,     setExams]     = useState<ExamRow[]>([emptyExam()])
+  const [noExams,   setNoExams]   = useState(false)
   const [aiError,   setAiError]   = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saving,    setSaving]    = useState(false)
@@ -56,6 +64,31 @@ export default function DoctorVideoCall({
     }
   }, [transcript])
 
+  // Realtime subscription for patient files during the call
+  useEffect(() => {
+    const channel = supabase
+      .channel(`diag-files-${appointmentId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'diagnostic_files',
+          filter: `appointment_id=eq.${appointmentId}`,
+        },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (payload: any) => {
+          const row = payload.new
+          if (row.stage === 'during_call') {
+            setSharedFiles((prev) => [...prev, { name: row.file_name, url: row.file_url }])
+          }
+        }
+      )
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [appointmentId])
+
   useEffect(() => {
     if (initialized.current) return
     initialized.current = true
@@ -65,7 +98,6 @@ export default function DoctorVideoCall({
 
     const call = Daily.createCallObject()
     callRef.current = call
-
     const session = sessionRef.current
 
     call.on('participant-updated', (ev) => {
@@ -85,7 +117,6 @@ export default function DoctorVideoCall({
         if (remoteAudioRef.current) {
           remoteAudioRef.current.srcObject = audioTrack ? new MediaStream([audioTrack]) : null
         }
-        // Add remote audio to transcription when it becomes available
         if (audioTrack) {
           session.addRemote(new MediaStream([audioTrack]), setTranscript)
         }
@@ -99,7 +130,7 @@ export default function DoctorVideoCall({
           localMicRef.current = localMic
           session.startLocal(localMic, setTranscript)
         } catch {
-          // Mic access for Deepgram failed — video call continues, no transcription
+          // Mic access for Deepgram failed — video call continues
         }
       })
       .catch(() => {
@@ -118,76 +149,63 @@ export default function DoctorVideoCall({
   }, [roomUrl, token])
 
   async function handleEndCall() {
-    // Stop Daily call
     if (callRef.current) {
       callRef.current.leave()
       callRef.current.destroy()
       callRef.current = null
     }
-
-    // Stop Deepgram
     const session = sessionRef.current
     session.stop()
     localMicRef.current?.getTracks().forEach((t) => t.stop())
-
     const fullTranscript = session.getTranscript() || transcript
     setPhase('processing')
 
-    // Generate AI summary via Edge Function
     try {
       const { data, error: fnErr } = await supabase.functions.invoke('claude-summary', {
         body: { transcript: fullTranscript },
       })
-
       if (!fnErr && data && !data.error) {
         setSummary(data.resumen ?? '')
-        const meds = data.medicamentos ?? []
-        if (meds.length > 0) {
-          setMeds(meds)
-          setNoMeds(false)
-        } else {
-          setMeds([emptyMed()])
-          setNoMeds(true)
-        }
+        const aiMeds = data.medicamentos ?? []
+        if (aiMeds.length > 0) { setMeds(aiMeds); setNoMeds(false) }
+        else { setMeds([emptyMed()]); setNoMeds(true) }
+        const aiExams = data.examenes ?? []
+        if (aiExams.length > 0) { setExams(aiExams); setNoExams(false) }
+        else { setExams([emptyExam()]); setNoExams(true) }
       } else {
         setAiError('No se pudo generar el resumen automático. Por favor completa los campos manualmente.')
       }
     } catch {
       setAiError('No se pudo generar el resumen automático. Por favor completa los campos manualmente.')
     }
-
     setPhase('review')
   }
 
   async function handleSaveAndComplete() {
-    if (!summary.trim()) {
-      setSaveError('El resumen de la consulta es obligatorio.')
-      return
-    }
+    if (!summary.trim()) { setSaveError('El resumen de la consulta es obligatorio.'); return }
     if (!noMeds && meds.some((m) => !m.medicine_name.trim() || !m.dose.trim() || !m.instructions.trim())) {
-      setSaveError('Completa todos los campos de los medicamentos o marca "No recetar".')
-      return
+      setSaveError('Completa todos los campos de los medicamentos o marca "No recetar".'); return
+    }
+    if (!noExams && exams.some((e) => !e.exam_type.trim())) {
+      setSaveError('Completa el tipo de examen o marca "No ordenar exámenes".'); return
     }
 
     setSaving(true)
     setSaveError(null)
 
-    // 1. Mark appointment completed + save summary
+    // 1. Mark appointment completed
     const { error: apptErr } = await supabase
       .from('appointments')
       .update({ completed: true, completed_at: new Date().toISOString(), summary: summary.trim() })
       .eq('id', appointmentId)
-
     if (apptErr) { setSaveError('No se pudo completar la cita.'); setSaving(false); return }
 
-    // 2. Create prescription + items if medications
+    // 2. Prescription + items
     if (!noMeds && meds.length > 0) {
       const { data: prescData, error: prescErr } = await supabase
         .from('prescriptions')
         .insert({ appointment_id: appointmentId, patient_id: patientId, doctor_id: doctorId, status: 'pendiente' })
-        .select('id')
-        .single()
-
+        .select('id').single()
       if (!prescErr && prescData) {
         await supabase.from('prescription_items').insert(
           meds.map((m) => ({
@@ -200,10 +218,25 @@ export default function DoctorVideoCall({
       }
     }
 
-    // 3. Doctor earnings
-    await supabase
-      .from('doctor_earnings')
-      .insert({ doctor_id: doctorId, appointment_id: appointmentId, amount: 10 })
+    // 3. Diagnostic orders
+    if (!noExams && exams.length > 0) {
+      const validExams = exams.filter((e) => e.exam_type.trim())
+      if (validExams.length > 0) {
+        await supabase.from('diagnostic_orders').insert(
+          validExams.map((e) => ({
+            appointment_id: appointmentId,
+            patient_id:     patientId,
+            doctor_id:      doctorId,
+            exam_type:      e.exam_type.trim(),
+            notes:          e.notes.trim() || null,
+            status:         'pending',
+          }))
+        )
+      }
+    }
+
+    // 4. Doctor earnings
+    await supabase.from('doctor_earnings').insert({ doctor_id: doctorId, appointment_id: appointmentId, amount: 10 })
 
     setSaving(false)
     setPhase('done')
@@ -250,7 +283,7 @@ export default function DoctorVideoCall({
             </div>
           )}
 
-          {/* Transcript (collapsed, for reference) */}
+          {/* Transcript (collapsed) */}
           {transcript && (
             <details className="bg-white border border-slate-200 rounded-xl">
               <summary className="px-4 py-3 text-sm font-semibold text-slate-600 cursor-pointer select-none">
@@ -281,37 +314,28 @@ export default function DoctorVideoCall({
           {/* Medications */}
           <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
             <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Medicamentos recetados</p>
-
             {!noMeds && (
               <div className="space-y-3">
                 {meds.map((med, i) => (
                   <div key={i} className="relative p-3 bg-slate-50 rounded-xl border border-slate-200">
                     {meds.length > 1 && (
-                      <button
-                        type="button"
+                      <button type="button"
                         onClick={() => setMeds((m) => m.filter((_, j) => j !== i))}
                         className="absolute top-2 right-2 w-5 h-5 rounded-full bg-slate-200 hover:bg-red-100 text-slate-500 hover:text-red-600 flex items-center justify-center text-xs font-bold transition-colors"
-                        aria-label="Eliminar"
-                      >×</button>
+                        aria-label="Eliminar">×</button>
                     )}
-                    <input
-                      type="text"
-                      value={med.medicine_name}
+                    <input type="text" value={med.medicine_name}
                       onChange={(e) => setMeds((m) => m.map((x, j) => j === i ? { ...x, medicine_name: e.target.value } : x))}
                       placeholder="Nombre del medicamento"
                       className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 mb-2 bg-white"
                     />
                     <div className="grid grid-cols-2 gap-2">
-                      <input
-                        type="text"
-                        value={med.dose}
+                      <input type="text" value={med.dose}
                         onChange={(e) => setMeds((m) => m.map((x, j) => j === i ? { ...x, dose: e.target.value } : x))}
                         placeholder="Dosis (ej: 500mg)"
                         className="border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 bg-white"
                       />
-                      <input
-                        type="text"
-                        value={med.instructions}
+                      <input type="text" value={med.instructions}
                         onChange={(e) => setMeds((m) => m.map((x, j) => j === i ? { ...x, instructions: e.target.value } : x))}
                         placeholder="ej: 1 pastilla cada 8 horas"
                         className="border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 bg-white"
@@ -319,24 +343,54 @@ export default function DoctorVideoCall({
                     </div>
                   </div>
                 ))}
-                <button
-                  type="button"
-                  onClick={() => setMeds((m) => [...m, emptyMed()])}
-                  className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 font-semibold transition-colors"
-                >
+                <button type="button" onClick={() => setMeds((m) => [...m, emptyMed()])}
+                  className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 font-semibold transition-colors">
                   <span className="text-lg leading-none">+</span> Agregar medicamento
                 </button>
               </div>
             )}
-
             <label className="flex items-center gap-2.5 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={noMeds}
-                onChange={(e) => setNoMeds(e.target.checked)}
-                className="w-4 h-4 rounded border-slate-300 accent-blue-600"
-              />
+              <input type="checkbox" checked={noMeds} onChange={(e) => setNoMeds(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-300 accent-blue-600" />
               <span className="text-sm text-slate-600">No recetar medicamentos en esta cita</span>
+            </label>
+          </div>
+
+          {/* Diagnostic exams */}
+          <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">🔬 Exámenes diagnósticos</p>
+            {!noExams && (
+              <div className="space-y-3">
+                {exams.map((exam, i) => (
+                  <div key={i} className="relative p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                    {exams.length > 1 && (
+                      <button type="button"
+                        onClick={() => setExams((e) => e.filter((_, j) => j !== i))}
+                        className="absolute top-2 right-2 w-5 h-5 rounded-full bg-slate-200 hover:bg-red-100 text-slate-500 hover:text-red-600 flex items-center justify-center text-xs font-bold transition-colors"
+                        aria-label="Eliminar">×</button>
+                    )}
+                    <input type="text" value={exam.exam_type}
+                      onChange={(e) => setExams((ex) => ex.map((x, j) => j === i ? { ...x, exam_type: e.target.value } : x))}
+                      placeholder="Tipo de examen (ej: Hemograma completo, Radiografía de tórax...)"
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 bg-white"
+                    />
+                    <input type="text" value={exam.notes}
+                      onChange={(e) => setExams((ex) => ex.map((x, j) => j === i ? { ...x, notes: e.target.value } : x))}
+                      placeholder="Instrucciones adicionales (opcional)"
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 bg-white"
+                    />
+                  </div>
+                ))}
+                <button type="button" onClick={() => setExams((e) => [...e, emptyExam()])}
+                  className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 font-semibold transition-colors">
+                  <span className="text-lg leading-none">+</span> Agregar examen
+                </button>
+              </div>
+            )}
+            <label className="flex items-center gap-2.5 cursor-pointer select-none">
+              <input type="checkbox" checked={noExams} onChange={(e) => setNoExams(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-300 accent-blue-600" />
+              <span className="text-sm text-slate-600">No ordenar exámenes en esta cita</span>
             </label>
           </div>
 
@@ -345,18 +399,12 @@ export default function DoctorVideoCall({
           )}
 
           <div className="flex gap-3 pb-4">
-            <button
-              onClick={onLeave}
-              disabled={saving || phase === 'done'}
-              className="flex-1 py-3 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50"
-            >
+            <button onClick={onLeave} disabled={saving || phase === 'done'}
+              className="flex-1 py-3 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50">
               Salir sin completar
             </button>
-            <button
-              onClick={handleSaveAndComplete}
-              disabled={saving || phase === 'done' || !summary.trim()}
-              className="flex-1 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-colors disabled:opacity-50 shadow-sm"
-            >
+            <button onClick={handleSaveAndComplete} disabled={saving || phase === 'done' || !summary.trim()}
+              className="flex-1 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-colors disabled:opacity-50 shadow-sm">
               {saving ? 'Guardando...' : phase === 'done' ? '✅ Guardado' : 'Guardar y completar ✓'}
             </button>
           </div>
@@ -389,18 +437,15 @@ export default function DoctorVideoCall({
         <div className="flex items-center justify-center gap-4 py-4">
           <CtrlBtn onClick={toggleMic} active={muted} label={muted ? 'Act.' : 'Silenc.'} icon="🎤" />
           <CtrlBtn onClick={toggleCam} active={camOff} label={camOff ? 'Act.' : 'Cámara'} icon="📷" />
-          <button
-            onClick={handleEndCall}
-            className="w-12 h-12 rounded-full bg-red-600 hover:bg-red-700 flex flex-col items-center justify-center gap-0.5 text-xs font-medium text-white transition-colors"
-            title="Terminar llamada"
-          >
+          <button onClick={handleEndCall}
+            className="w-12 h-12 rounded-full bg-red-600 hover:bg-red-700 flex flex-col items-center justify-center gap-0.5 text-xs font-medium text-white transition-colors">
             <span className="text-base leading-none">📵</span>
             <span>Fin</span>
           </button>
         </div>
       </div>
 
-      {/* ── Right: Transcript panel ── */}
+      {/* ── Right: Transcript + shared files panel ── */}
       <div className="w-full md:w-[340px] bg-white flex flex-col overflow-hidden border-t md:border-t-0 md:border-l border-slate-200 max-h-[40vh] md:max-h-none">
         <div className="px-4 py-3 border-b border-slate-100 shrink-0 flex items-center justify-between">
           <h2 className="text-sm font-bold text-slate-900">📝 Transcripción en vivo</h2>
@@ -410,16 +455,30 @@ export default function DoctorVideoCall({
           </span>
         </div>
 
-        <div
-          ref={transcriptRef}
-          className="flex-1 overflow-y-auto p-4 text-sm text-slate-700 leading-relaxed font-mono whitespace-pre-wrap"
-        >
+        <div ref={transcriptRef}
+          className="flex-1 overflow-y-auto p-4 text-sm text-slate-700 leading-relaxed font-mono whitespace-pre-wrap">
           {transcript || (
             <span className="text-slate-400 not-italic font-sans text-xs">
               La transcripción aparecerá aquí mientras hablan...
             </span>
           )}
         </div>
+
+        {/* Patient shared files notifications */}
+        {sharedFiles.length > 0 && (
+          <div className="px-4 py-3 border-t border-blue-100 bg-blue-50 shrink-0 space-y-1.5">
+            <p className="text-xs font-bold text-blue-700 uppercase tracking-wide">Archivos del paciente</p>
+            {sharedFiles.map((f, i) => (
+              <div key={i} className="flex items-center gap-2 text-xs text-blue-800">
+                <span>📎 {f.name}</span>
+                <a href={f.url} target="_blank" rel="noopener noreferrer"
+                  className="ml-auto text-xs font-semibold text-blue-600 hover:text-blue-800 underline shrink-0">
+                  Ver →
+                </a>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -427,12 +486,10 @@ export default function DoctorVideoCall({
 
 function CtrlBtn({ onClick, active, label, icon }: { onClick: () => void; active: boolean; label: string; icon: string }) {
   return (
-    <button
-      onClick={onClick}
+    <button onClick={onClick}
       className={`w-12 h-12 rounded-full flex flex-col items-center justify-center gap-0.5 text-xs font-medium transition-colors ${
         active ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-slate-700 hover:bg-slate-600 text-slate-200'
-      }`}
-    >
+      }`}>
       <span className="text-base leading-none">{icon}</span>
       <span>{label}</span>
     </button>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import NavBar from '../../components/NavBar'
@@ -149,6 +149,10 @@ export default function PatientAgendarPage() {
   const [reason, setReason]           = useState('')
   const [submitting, setSubmitting]   = useState(false)
 
+  // Pre-appointment file upload
+  const preFileRef = useRef<HTMLInputElement>(null)
+  const [preFiles, setPreFiles] = useState<File[]>([])
+
   // Feedback
   const [error, setError]     = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -224,13 +228,13 @@ export default function PatientAgendarPage() {
     setSubmitting(true)
     setError(null)
 
-    const { error: err } = await supabase.from('appointments').insert({
+    const { data: apptData, error: err } = await supabase.from('appointments').insert({
       patient_id: profile.id,
       doctor_id:  bookingSlot.doctor_id,
       slot_id:    bookingSlot.id,
       status:     'confirmed',
       reason:     reason.trim() || null,
-    })
+    }).select('id').single()
 
     if (err) {
       setError('No se pudo reservar la cita. Intenta con otro horario.')
@@ -238,6 +242,29 @@ export default function PatientAgendarPage() {
       setSuccess(
         `¡Cita confirmada con ${bookingSlot.doctor?.full_name ?? 'el doctor'} el ${formatDate(bookingSlot.date)} · ${formatTime(bookingSlot.start_time)}.`
       )
+
+      // Upload pre-appointment files (fire-and-forget)
+      if (apptData?.id && preFiles.length > 0) {
+        const apptId = apptData.id
+        preFiles.forEach(async (file) => {
+          const ext  = file.name.split('.').pop()
+          const path = `pre/${profile.id}/${apptId}/${Date.now()}.${ext}`
+          const { error: upErr } = await supabase.storage
+            .from('diagnostic-files')
+            .upload(path, file, { upsert: true })
+          if (!upErr) {
+            const { data: { publicUrl } } = supabase.storage.from('diagnostic-files').getPublicUrl(path)
+            await supabase.from('diagnostic_files').insert({
+              appointment_id: apptId,
+              patient_id:     profile.id,
+              file_url:       publicUrl,
+              file_name:      file.name,
+              file_size:      `${(file.size / 1024).toFixed(0)} KB`,
+              stage:          'pre_appointment',
+            })
+          }
+        })
+      }
 
       // Fire-and-forget confirmation emails (non-blocking)
       if (profile.email) {
@@ -257,6 +284,7 @@ export default function PatientAgendarPage() {
 
       setBookingSlot(null)
       setReason('')
+      setPreFiles([])
       setSelectedDate(null)
       await fetchSlots(selectedSpecialty as Specialty)
       await fetchActiveSpecialties()
@@ -444,10 +472,54 @@ export default function PatientAgendarPage() {
                     {reason.trim().length}/10 caracteres mínimo
                   </p>
                 </div>
+                {/* Optional: pre-appointment file upload */}
+                <div className="mt-5 pt-4 border-t border-slate-100">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                    Documentos previos <span className="normal-case font-normal text-slate-400">(opcional)</span>
+                  </p>
+                  <p className="text-xs text-slate-400 mb-3">¿Tienes exámenes o documentos médicos previos relevantes?</p>
+                  <button
+                    type="button"
+                    onClick={() => preFileRef.current?.click()}
+                    className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-dashed border-blue-200 text-xs font-semibold text-blue-600 hover:bg-blue-50 hover:border-blue-300 transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                    </svg>
+                    📎 Subir archivos
+                  </button>
+                  <input
+                    ref={preFileRef}
+                    type="file"
+                    multiple
+                    accept="application/pdf,image/jpeg,image/jpg,image/png"
+                    className="hidden"
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files ?? []).filter((f) => f.size <= 10 * 1024 * 1024)
+                      setPreFiles((prev) => [...prev, ...files])
+                      e.target.value = ''
+                    }}
+                  />
+                  {preFiles.length > 0 && (
+                    <ul className="mt-2 space-y-1">
+                      {preFiles.map((f, i) => (
+                        <li key={i} className="flex items-center gap-2 text-xs text-slate-600 bg-slate-50 rounded-lg px-3 py-1.5 border border-slate-100">
+                          <span className="flex-1 truncate">📄 {f.name}</span>
+                          <button
+                            type="button"
+                            onClick={() => setPreFiles((prev) => prev.filter((_, j) => j !== i))}
+                            className="text-slate-400 hover:text-red-500 transition-colors font-bold"
+                          >×</button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
                 <button
                   onClick={handleBook}
                   disabled={submitting || reason.trim().length < 10}
-                  className="w-full sm:w-auto px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shadow-blue-100"
+                  className="mt-4 w-full sm:w-auto px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shadow-blue-100"
                 >
                   {submitting ? 'Reservando...' : `Confirmar cita · ${formatTime(bookingSlot.start_time)}`}
                 </button>
