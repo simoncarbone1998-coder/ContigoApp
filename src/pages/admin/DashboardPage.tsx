@@ -1,7 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import NavBar from '../../components/NavBar'
+import { useAuth } from '../../contexts/AuthContext'
 import type { Profile, Appointment } from '../../lib/types'
+import type { Role } from '../../lib/types'
+import { specialtyLabel } from '../../lib/types'
 
 function formatDate(d: string) {
   const [y, m, day] = d.split('-')
@@ -18,12 +21,19 @@ function initials(name: string | null, email: string | null) {
   return (email?.[0] ?? '?').toUpperCase()
 }
 
-type Tab = 'appointments' | 'patients' | 'doctors' | 'ratings' | 'exams'
+const ROLE_LABELS: Record<Role, string> = { patient: 'Paciente', doctor: 'Médico', admin: 'Admin' }
+const ROLE_COLORS: Record<Role, string> = {
+  patient: 'bg-blue-50 text-blue-700 border-blue-200',
+  doctor:  'bg-emerald-50 text-emerald-700 border-emerald-200',
+  admin:   'bg-red-50 text-red-700 border-red-200',
+}
+
+type Tab = 'appointments' | 'users' | 'ratings' | 'exams'
 
 export default function AdminDashboard() {
+  const { profile: adminProfile } = useAuth()
   const [tab, setTab] = useState<Tab>('appointments')
-  const [patients, setPatients] = useState<Profile[]>([])
-  const [doctors, setDoctors] = useState<Profile[]>([])
+  const [allUsers, setAllUsers] = useState<Profile[]>([])
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [loading, setLoading] = useState(true)
   const [cancelling, setCancelling] = useState<string | null>(null)
@@ -33,12 +43,28 @@ export default function AdminDashboard() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [diagOrders, setDiagOrders] = useState<any[]>([])
 
+  // User management state
+  const [userSearch, setUserSearch] = useState('')
+  const [userRoleFilter, setUserRoleFilter] = useState<Role | 'all'>('all')
+  const [roleChanging, setRoleChanging] = useState<string | null>(null)
+  const [confirmTarget, setConfirmTarget] = useState<{ user: Profile; newRole: Role } | null>(null)
+  const [confirmInput, setConfirmInput] = useState('')
+  const [detailUser, setDetailUser] = useState<Profile | null>(null)
+  const [detailApptCount, setDetailApptCount] = useState<number | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const showToast = (msg: string) => {
+    setToast(msg)
+    if (toastTimer.current) clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setToast(null), 3000)
+  }
+
   const fetchAll = useCallback(async () => {
     setLoading(true)
     setError(null)
-    const [pR, dR, aR, fR, doR] = await Promise.all([
-      supabase.from('profiles').select('*').eq('role', 'patient').order('full_name'),
-      supabase.from('profiles').select('*').eq('role', 'doctor').order('full_name'),
+    const [uR, aR, fR, doR] = await Promise.all([
+      supabase.from('profiles').select('*').order('created_at', { ascending: false }),
       supabase.from('appointments').select('*, patient:patient_id(id, full_name, email), doctor:doctor_id(id, full_name, email), slot:slot_id(*)').order('created_at', { ascending: false }),
       supabase.from('appointment_feedback')
         .select('id, rating, comment, created_at, doctor_id, patient:patient_id(full_name), doctor:doctor_id(full_name), appointment:appointment_id(slot:slot_id(date, start_time))')
@@ -47,10 +73,9 @@ export default function AdminDashboard() {
         .select('id, exam_type, status, created_at, patient:patient_id(full_name), doctor:doctor_id(full_name)')
         .order('created_at', { ascending: false }),
     ])
-    if (pR.error || dR.error || aR.error) setError('No se pudo cargar la información. Intenta de nuevo.')
+    if (uR.error || aR.error) setError('No se pudo cargar la información. Intenta de nuevo.')
     else {
-      setPatients((pR.data ?? []) as Profile[])
-      setDoctors((dR.data ?? []) as Profile[])
+      setAllUsers((uR.data ?? []) as Profile[])
       setAppointments((aR.data ?? []) as Appointment[])
       setFeedbacks(fR.data ?? [])
       setDiagOrders(doR.data ?? [])
@@ -59,6 +84,16 @@ export default function AdminDashboard() {
   }, [])
 
   useEffect(() => { fetchAll() }, [fetchAll])
+
+  // Fetch appointment count when detail modal opens
+  useEffect(() => {
+    if (!detailUser) { setDetailApptCount(null); return }
+    supabase
+      .from('appointments')
+      .select('id', { count: 'exact', head: true })
+      .or(`patient_id.eq.${detailUser.id},doctor_id.eq.${detailUser.id}`)
+      .then(({ count }) => setDetailApptCount(count ?? 0))
+  }, [detailUser])
 
   async function handleCancel(id: string) {
     setCancelling(id)
@@ -69,10 +104,31 @@ export default function AdminDashboard() {
     setCancelling(null)
   }
 
+  async function handleRoleChange() {
+    if (!confirmTarget) return
+    const { user, newRole } = confirmTarget
+    // Extra guard: require typing "CONFIRMAR" for admin promotion
+    if (newRole === 'admin' && confirmInput !== 'CONFIRMAR') return
+    setRoleChanging(user.id)
+    const { error: err } = await supabase.from('profiles').update({ role: newRole }).eq('id', user.id)
+    if (err) {
+      setError('No se pudo cambiar el rol. Intenta de nuevo.')
+    } else {
+      setAllUsers((prev) => prev.map((u) => u.id === user.id ? { ...u, role: newRole } : u))
+      showToast(`Rol de ${user.full_name ?? user.email} cambiado a ${ROLE_LABELS[newRole]}.`)
+    }
+    setRoleChanging(null)
+    setConfirmTarget(null)
+    setConfirmInput('')
+  }
+
+  const patients = allUsers.filter((u) => u.role === 'patient')
+  const doctors  = allUsers.filter((u) => u.role === 'doctor')
+
   const stats = [
-    { label: 'Pacientes', value: patients.length, bg: 'bg-blue-50', text: 'text-blue-700', icon: '👥' },
-    { label: 'Médicos', value: doctors.length, bg: 'bg-emerald-50', text: 'text-emerald-700', icon: '🩺' },
-    { label: 'Citas totales', value: appointments.length, bg: 'bg-violet-50', text: 'text-violet-700', icon: '🗓️' },
+    { label: 'Pacientes',    value: patients.length,     bg: 'bg-blue-50',    text: 'text-blue-700',    icon: '👥' },
+    { label: 'Médicos',      value: doctors.length,      bg: 'bg-emerald-50', text: 'text-emerald-700', icon: '🩺' },
+    { label: 'Citas totales', value: appointments.length, bg: 'bg-violet-50',  text: 'text-violet-700',  icon: '🗓️' },
     {
       label: 'Citas activas',
       value: appointments.filter((a) => a.status === 'confirmed').length,
@@ -99,15 +155,138 @@ export default function AdminDashboard() {
 
   const tabs: { key: Tab; label: string; count: number }[] = [
     { key: 'appointments', label: 'Citas',          count: appointments.length },
-    { key: 'patients',     label: 'Pacientes',       count: patients.length },
-    { key: 'doctors',      label: 'Médicos',         count: doctors.length },
+    { key: 'users',        label: 'Usuarios',        count: allUsers.length },
     { key: 'ratings',      label: 'Calificaciones',  count: feedbacks.length },
     { key: 'exams',        label: 'Exámenes',        count: diagOrders.length },
   ]
 
+  // Filtered users for users tab
+  const filteredUsers = allUsers.filter((u) => {
+    const matchesRole = userRoleFilter === 'all' || u.role === userRoleFilter
+    const q = userSearch.toLowerCase()
+    const matchesSearch = !q
+      || (u.full_name ?? '').toLowerCase().includes(q)
+      || (u.email ?? '').toLowerCase().includes(q)
+    return matchesRole && matchesSearch
+  })
+
   return (
     <div className="min-h-screen bg-slate-50">
       <NavBar />
+
+      {/* Toast */}
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white text-sm font-medium px-5 py-3 rounded-2xl shadow-lg">
+          {toast}
+        </div>
+      )}
+
+      {/* Role change confirmation modal */}
+      {confirmTarget && (
+        <div className="fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="text-2xl">⚠️</div>
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Cambiar rol</h2>
+                <p className="text-sm text-slate-600 mt-1">
+                  ¿Cambiar el rol de <strong>{confirmTarget.user.full_name ?? confirmTarget.user.email}</strong> a{' '}
+                  <strong>{ROLE_LABELS[confirmTarget.newRole]}</strong>?
+                </p>
+              </div>
+            </div>
+
+            {confirmTarget.newRole === 'admin' && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4 space-y-3">
+                <p className="text-sm font-semibold text-red-700">
+                  Advertencia: estás a punto de otorgar permisos de administrador completos a este usuario.
+                  Tendrá acceso total al panel de administración.
+                </p>
+                <p className="text-xs text-red-600">Escribe <strong>CONFIRMAR</strong> para continuar:</p>
+                <input
+                  type="text"
+                  value={confirmInput}
+                  onChange={(e) => setConfirmInput(e.target.value)}
+                  placeholder="CONFIRMAR"
+                  className="w-full border border-red-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
+                />
+              </div>
+            )}
+
+            <div className="flex gap-3 pt-1">
+              <button
+                onClick={() => { setConfirmTarget(null); setConfirmInput('') }}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleRoleChange}
+                disabled={
+                  roleChanging === confirmTarget.user.id ||
+                  (confirmTarget.newRole === 'admin' && confirmInput !== 'CONFIRMAR')
+                }
+                className="flex-1 py-2.5 rounded-xl bg-blue-600 text-sm font-semibold text-white hover:bg-blue-700 transition-colors disabled:opacity-50"
+              >
+                {roleChanging === confirmTarget.user.id ? 'Cambiando...' : 'Confirmar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* User detail modal */}
+      {detailUser && (
+        <div className="fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4" onClick={() => setDetailUser(null)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold text-slate-900">Detalle del usuario</h2>
+              <button onClick={() => setDetailUser(null)} className="text-slate-400 hover:text-slate-600 text-xl leading-none">×</button>
+            </div>
+
+            {/* Avatar + name */}
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
+                <span className="text-blue-700 text-xl font-bold">{initials(detailUser.full_name, detailUser.email)}</span>
+              </div>
+              <div>
+                <p className="font-bold text-slate-900 text-base">{detailUser.full_name ?? '—'}</p>
+                <p className="text-slate-500 text-sm">{detailUser.email ?? '—'}</p>
+                <span className={`inline-block mt-1 text-xs font-semibold px-2.5 py-0.5 rounded-full border ${ROLE_COLORS[detailUser.role]}`}>
+                  {ROLE_LABELS[detailUser.role]}
+                </span>
+              </div>
+            </div>
+
+            <div className="border-t border-slate-100" />
+
+            <div className="space-y-2.5 text-sm">
+              {[
+                { label: 'Teléfono', value: detailUser.phone },
+                { label: 'Ciudad', value: detailUser.city },
+                { label: 'Fecha de nacimiento', value: detailUser.birth_date ? formatDate(detailUser.birth_date) : null },
+                { label: 'Registro', value: formatDate(detailUser.created_at.slice(0, 10)) },
+                ...(detailUser.role === 'doctor' ? [
+                  { label: 'Especialidad', value: specialtyLabel(detailUser.specialty) },
+                  { label: 'Universidad', value: detailUser.undergraduate_university },
+                  { label: 'Posgrado', value: detailUser.postgraduate_specialty },
+                ] : []),
+              ].map(({ label, value }) => (
+                <div key={label} className="flex justify-between gap-4">
+                  <span className="text-slate-400 font-medium">{label}</span>
+                  <span className="text-slate-800 text-right">{value ?? '—'}</span>
+                </div>
+              ))}
+              <div className="flex justify-between gap-4">
+                <span className="text-slate-400 font-medium">Citas</span>
+                <span className="text-slate-800">
+                  {detailApptCount === null ? '...' : detailApptCount}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <main className="max-w-6xl mx-auto px-4 py-8 space-y-6">
 
@@ -164,10 +343,19 @@ export default function AdminDashboard() {
               <div className="flex justify-center py-10">
                 <div className="w-8 h-8 border-4 border-blue-100 border-t-blue-700 rounded-full animate-spin" />
               </div>
-            ) : tab === 'patients' ? (
-              <ProfileTable profiles={patients} emptyMsg="No hay pacientes registrados." />
-            ) : tab === 'doctors' ? (
-              <ProfileTable profiles={doctors} emptyMsg="No hay médicos registrados." ratingMap={doctorAvgMap} />
+            ) : tab === 'users' ? (
+              <UsersSection
+                users={filteredUsers}
+                search={userSearch}
+                onSearchChange={setUserSearch}
+                roleFilter={userRoleFilter}
+                onRoleFilterChange={setUserRoleFilter}
+                currentAdminId={adminProfile?.id ?? null}
+                roleChanging={roleChanging}
+                onRoleChange={(user, newRole) => { setConfirmTarget({ user, newRole }); setConfirmInput('') }}
+                onDetail={setDetailUser}
+                ratingMap={doctorAvgMap}
+              />
             ) : tab === 'ratings' ? (
               <RatingsSection feedbacks={feedbacks} avgRating={avgRating} />
             ) : tab === 'exams' ? (
@@ -182,47 +370,136 @@ export default function AdminDashboard() {
   )
 }
 
-function ProfileTable({ profiles, emptyMsg, ratingMap }: { profiles: Profile[]; emptyMsg: string; ratingMap?: Record<string, number> }) {
-  if (profiles.length === 0) {
-    return (
-      <div className="text-center py-10">
-        <p className="text-slate-500 text-sm font-medium">{emptyMsg}</p>
-      </div>
-    )
-  }
+function UsersSection({
+  users, search, onSearchChange, roleFilter, onRoleFilterChange,
+  currentAdminId, roleChanging, onRoleChange, onDetail, ratingMap,
+}: {
+  users: Profile[]
+  search: string
+  onSearchChange: (v: string) => void
+  roleFilter: Role | 'all'
+  onRoleFilterChange: (v: Role | 'all') => void
+  currentAdminId: string | null
+  roleChanging: string | null
+  onRoleChange: (user: Profile, newRole: Role) => void
+  onDetail: (user: Profile) => void
+  ratingMap: Record<string, number>
+}) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-slate-100">
-            <th className="text-left py-3 pr-4 text-xs font-semibold text-slate-400 uppercase tracking-wide">Usuario</th>
-            <th className="text-left py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Correo</th>
-          </tr>
-        </thead>
-        <tbody>
-          {profiles.map((p) => (
-            <tr key={p.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-              <td className="py-3.5 pr-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
-                    <span className="text-blue-700 text-xs font-bold">{initials(p.full_name, p.email)}</span>
-                  </div>
-                  <div>
-                    <span className="font-semibold text-slate-900">{p.full_name ?? '—'}</span>
-                    {ratingMap?.[p.id] !== undefined && (
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <StarsDisplay rating={Math.round(ratingMap[p.id])} />
-                        <span className="text-xs text-slate-400">{ratingMap[p.id].toFixed(1)}</span>
+    <div className="space-y-4">
+      {/* Search + filter bar */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder="Buscar por nombre o correo..."
+            className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+          />
+        </div>
+        <select
+          value={roleFilter}
+          onChange={(e) => onRoleFilterChange(e.target.value as Role | 'all')}
+          className="border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+        >
+          <option value="all">Todos los roles</option>
+          <option value="patient">Pacientes</option>
+          <option value="doctor">Médicos</option>
+          <option value="admin">Admins</option>
+        </select>
+      </div>
+
+      {users.length === 0 ? (
+        <div className="text-center py-10">
+          <p className="text-slate-500 text-sm font-medium">No hay usuarios que coincidan.</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-100">
+                {['Usuario', 'Correo', 'Rol', 'Registro', 'Cambiar rol', ''].map((h) => (
+                  <th key={h} className="text-left py-3 pr-4 text-xs font-semibold text-slate-400 uppercase tracking-wide last:pr-0">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((u) => {
+                const isMe = u.id === currentAdminId
+                const [y, m, d] = u.created_at.slice(0, 10).split('-')
+                return (
+                  <tr key={u.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                    {/* Name + avatar */}
+                    <td className="py-3.5 pr-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
+                          <span className="text-blue-700 text-xs font-bold">{initials(u.full_name, u.email)}</span>
+                        </div>
+                        <div>
+                          <span className="font-semibold text-slate-900">{u.full_name ?? '—'}</span>
+                          {u.role === 'doctor' && ratingMap[u.id] !== undefined && (
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <StarsDisplay rating={Math.round(ratingMap[u.id])} />
+                              <span className="text-xs text-slate-400">{ratingMap[u.id].toFixed(1)}</span>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    )}
-                  </div>
-                </div>
-              </td>
-              <td className="py-3.5 text-slate-500">{p.email ?? '—'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                    </td>
+
+                    {/* Email */}
+                    <td className="py-3.5 pr-4 text-slate-500">{u.email ?? '—'}</td>
+
+                    {/* Role badge */}
+                    <td className="py-3.5 pr-4">
+                      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${ROLE_COLORS[u.role]}`}>
+                        {ROLE_LABELS[u.role]}
+                      </span>
+                    </td>
+
+                    {/* Registration date */}
+                    <td className="py-3.5 pr-4 text-slate-500 whitespace-nowrap">{`${d}/${m}/${y}`}</td>
+
+                    {/* Role change dropdown */}
+                    <td className="py-3.5 pr-4">
+                      {isMe ? (
+                        <span className="text-xs text-slate-300 italic">tú</span>
+                      ) : (
+                        <select
+                          value={u.role}
+                          disabled={roleChanging === u.id}
+                          onChange={(e) => onRoleChange(u, e.target.value as Role)}
+                          className="border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white disabled:opacity-50"
+                        >
+                          <option value="patient">Hacer paciente</option>
+                          <option value="doctor">Hacer médico</option>
+                          <option value="admin">Hacer admin</option>
+                        </select>
+                      )}
+                    </td>
+
+                    {/* Detail button */}
+                    <td className="py-3.5">
+                      <button
+                        onClick={() => onDetail(u)}
+                        className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 bg-white hover:bg-slate-50 transition-colors font-medium whitespace-nowrap"
+                      >
+                        Ver perfil
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }
