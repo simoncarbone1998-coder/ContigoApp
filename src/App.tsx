@@ -28,6 +28,7 @@ import DoctorOnboarding  from './components/onboarding/DoctorOnboarding'
 
 export default function App() {
   return (
+    <>
     <Routes>
       {/* Public routes */}
       <Route path="/" element={<LandingPage />} />
@@ -67,5 +68,6 @@ export default function App() {
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
     <InstallPrompt />
+    </>
   )
 }

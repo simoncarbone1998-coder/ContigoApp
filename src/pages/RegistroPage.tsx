@@ -25,7 +25,7 @@ function Logo() {
   return <img src="/logo.png" alt="Contigo" className="h-16 w-auto" onError={() => setErr(true)} />
 }
 
-function Field({ id, label, icon, children }: { id: string; label: string; icon: React.ReactNode; children: React.ReactNode }) {
+function Field({ id, label, children }: { id: string; label: string; icon?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div>
       <label htmlFor={id} className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{label}</label>
