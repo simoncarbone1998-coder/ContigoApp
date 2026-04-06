@@ -43,6 +43,12 @@ export default function AdminDashboard() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [diagOrders, setDiagOrders] = useState<any[]>([])
 
+  // Pending doctors
+  const [pendingDoctors, setPendingDoctors] = useState<Profile[]>([])
+  const [rejectTarget,   setRejectTarget]   = useState<Profile | null>(null)
+  const [rejectReason,   setRejectReason]   = useState('')
+  const [processingId,   setProcessingId]   = useState<string | null>(null)
+
   // User management state
   const [userSearch, setUserSearch] = useState('')
   const [userRoleFilter, setUserRoleFilter] = useState<Role | 'all'>('all')
@@ -58,6 +64,68 @@ export default function AdminDashboard() {
     setToast(msg)
     if (toastTimer.current) clearTimeout(toastTimer.current)
     toastTimer.current = setTimeout(() => setToast(null), 3000)
+  }
+
+  const fetchPending = useCallback(async () => {
+    const { data } = await supabase.from('profiles').select('*').eq('role', 'doctor').eq('doctor_status', 'pending').order('created_at', { ascending: false })
+    setPendingDoctors((data ?? []) as Profile[])
+  }, [])
+
+  useEffect(() => { fetchPending() }, [fetchPending])
+
+  async function handleApprove(doctor: Profile) {
+    setProcessingId(doctor.id)
+    await supabase.from('profiles').update({ doctor_status: 'approved', approved_at: new Date().toISOString() }).eq('id', doctor.id)
+    try {
+      await supabase.functions.invoke('send-email', {
+        body: {
+          to: doctor.email,
+          subject: '✅ Tu cuenta ha sido aprobada — Contigo',
+          html: `
+            <p>¡Bienvenido a Contigo, Dr(a). ${doctor.full_name}! 🎉</p>
+            <p>Tu cuenta ha sido aprobada. Ya puedes iniciar sesión y empezar a recibir pacientes.</p>
+            <br/>
+            <p><a href="https://contigomedicina.com/login" style="background:#1e3a5f;color:#fff;padding:12px 24px;border-radius:12px;text-decoration:none;font-weight:bold;">Iniciar sesión →</a></p>
+            <br/>
+            <p>El equipo de Contigo</p>
+          `,
+        },
+      })
+    } catch { /* non-critical */ }
+    setPendingDoctors((prev) => prev.filter((d) => d.id !== doctor.id))
+    setAllUsers((prev) => prev.map((u) => u.id === doctor.id ? { ...u, doctor_status: 'approved' as const } : u))
+    showToast(`✅ ${doctor.full_name ?? doctor.email} aprobado exitosamente`)
+    setProcessingId(null)
+  }
+
+  async function handleRejectConfirm() {
+    if (!rejectTarget) return
+    const doctor = rejectTarget
+    setProcessingId(doctor.id)
+    setRejectTarget(null)
+    await supabase.from('profiles').update({ doctor_status: 'rejected', rejected_at: new Date().toISOString(), rejection_reason: rejectReason.trim() || null }).eq('id', doctor.id)
+    try {
+      await supabase.functions.invoke('send-email', {
+        body: {
+          to: doctor.email,
+          subject: 'Tu solicitud en Contigo',
+          html: `
+            <p>Hola Dr(a). ${doctor.full_name},</p>
+            <p>Hemos revisado tu solicitud y lamentablemente no podemos aprobarla en este momento.</p>
+            ${rejectReason.trim() ? `<p><strong>Motivo:</strong> ${rejectReason.trim()}</p>` : ''}
+            <br/>
+            <p>Para más información escríbenos a <a href="mailto:hola@contigomedicina.com">hola@contigomedicina.com</a></p>
+            <br/>
+            <p>El equipo de Contigo</p>
+          `,
+        },
+      })
+    } catch { /* non-critical */ }
+    setPendingDoctors((prev) => prev.filter((d) => d.id !== doctor.id))
+    setAllUsers((prev) => prev.map((u) => u.id === doctor.id ? { ...u, doctor_status: 'rejected' as const } : u))
+    showToast('Solicitud rechazada')
+    setRejectReason('')
+    setProcessingId(null)
   }
 
   const fetchAll = useCallback(async () => {
@@ -235,6 +303,50 @@ export default function AdminDashboard() {
         </div>
       )}
 
+      {/* Reject doctor modal */}
+      {rejectTarget && (
+        <div className="fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="text-2xl">🚫</div>
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Rechazar solicitud</h2>
+                <p className="text-sm text-slate-600 mt-1">
+                  ¿Rechazar la solicitud de <strong>{rejectTarget.full_name ?? rejectTarget.email}</strong>?
+                </p>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                Motivo del rechazo (opcional)
+              </label>
+              <textarea
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="Ej: La tarjeta profesional no es legible, por favor enviar una nueva..."
+                rows={3}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 resize-none"
+              />
+            </div>
+            <div className="flex gap-3 pt-1">
+              <button
+                onClick={() => { setRejectTarget(null); setRejectReason('') }}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleRejectConfirm}
+                disabled={processingId === rejectTarget.id}
+                className="flex-1 py-2.5 rounded-xl bg-red-600 text-sm font-semibold text-white hover:bg-red-700 transition-colors disabled:opacity-50"
+              >
+                {processingId === rejectTarget.id ? 'Rechazando...' : 'Rechazar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* User detail modal */}
       {detailUser && (
         <div className="fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4" onClick={() => setDetailUser(null)}>
@@ -314,6 +426,63 @@ export default function AdminDashboard() {
             </div>
           ))}
         </div>
+
+        {/* Pending doctors section */}
+        {pendingDoctors.length > 0 && (
+          <div className="bg-white rounded-2xl border border-amber-200 shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-amber-100 bg-amber-50">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">⏳</span>
+                <h2 className="text-base font-bold text-slate-900">Médicos pendientes de aprobación</h2>
+                <span className="bg-amber-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                  {pendingDoctors.length}
+                </span>
+              </div>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {pendingDoctors.map((doctor) => (
+                <div key={doctor.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-6 py-4">
+                  <div className="flex items-start gap-4">
+                    <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+                      <span className="text-emerald-700 text-sm font-bold">{initials(doctor.full_name, doctor.email)}</span>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-slate-900">{doctor.full_name ?? '—'}</p>
+                      <p className="text-sm text-slate-500">{doctor.email}</p>
+                      <div className="flex flex-wrap gap-3 mt-1.5 text-xs text-slate-500">
+                        {doctor.specialty && (
+                          <span className="bg-slate-100 px-2 py-0.5 rounded-md font-medium">{specialtyLabel(doctor.specialty)}</span>
+                        )}
+                        {doctor.undergraduate_university && (
+                          <span className="bg-slate-100 px-2 py-0.5 rounded-md">{doctor.undergraduate_university}</span>
+                        )}
+                        {doctor.medical_license && (
+                          <span className="bg-slate-100 px-2 py-0.5 rounded-md">T.P. {doctor.medical_license}</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 shrink-0">
+                    <button
+                      onClick={() => handleApprove(doctor)}
+                      disabled={processingId === doctor.id}
+                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-colors disabled:opacity-50"
+                    >
+                      {processingId === doctor.id ? '...' : 'Aprobar'}
+                    </button>
+                    <button
+                      onClick={() => { setRejectTarget(doctor); setRejectReason('') }}
+                      disabled={processingId === doctor.id}
+                      className="px-4 py-2 rounded-xl border border-red-200 text-red-600 bg-white hover:bg-red-50 text-sm font-semibold transition-colors disabled:opacity-50"
+                    >
+                      Rechazar
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Tabs + table */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -458,9 +627,22 @@ function UsersSection({
 
                     {/* Role badge */}
                     <td className="py-3.5 pr-4">
-                      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${ROLE_COLORS[u.role]}`}>
-                        {ROLE_LABELS[u.role]}
-                      </span>
+                      <div className="flex flex-col gap-1">
+                        <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border w-fit ${ROLE_COLORS[u.role]}`}>
+                          {ROLE_LABELS[u.role]}
+                        </span>
+                        {u.role === 'doctor' && u.doctor_status && (
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border w-fit ${
+                            u.doctor_status === 'approved'
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : u.doctor_status === 'pending'
+                              ? 'bg-amber-50 text-amber-700 border-amber-200'
+                              : 'bg-red-50 text-red-700 border-red-200'
+                          }`}>
+                            {u.doctor_status === 'approved' ? 'Aprobado' : u.doctor_status === 'pending' ? 'Pendiente' : 'Rechazado'}
+                          </span>
+                        )}
+                      </div>
                     </td>
 
                     {/* Registration date */}

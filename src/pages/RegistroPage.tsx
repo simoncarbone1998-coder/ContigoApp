@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import { SPECIALTIES } from '../lib/types'
 import type { Role } from '../lib/types'
 
 const roleHome: Record<Role, string> = {
   patient: '/paciente/perfil',
-  doctor:  '/doctor/agenda',
+  doctor:  '/doctor/pending',
   admin:   '/admin/dashboard',
 }
 
@@ -20,193 +21,76 @@ const inputCls =
 
 function Logo() {
   const [err, setErr] = useState(false)
-  if (err) {
-    return (
-      <span className="text-3xl font-extrabold tracking-tight">
-        <span style={{ color: '#16a34a' }}>con</span>
-        <span style={{ color: '#1e3a5f' }}>tigo</span>
-      </span>
-    )
-  }
+  if (err) return <span className="text-3xl font-extrabold tracking-tight"><span style={{ color: '#16a34a' }}>con</span><span style={{ color: '#1e3a5f' }}>tigo</span></span>
   return <img src="/logo.png" alt="Contigo" className="h-16 w-auto" onError={() => setErr(true)} />
 }
 
-function Field({
-  id, label, icon, children,
-}: {
-  id: string; label: string; icon: React.ReactNode; children: React.ReactNode
-}) {
+function Field({ id, label, icon, children }: { id: string; label: string; icon: React.ReactNode; children: React.ReactNode }) {
   return (
     <div>
-      <label htmlFor={id} className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
-        {label}
-      </label>
-      <div className="relative">
-        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
-          {icon}
-        </span>
-        {children}
-      </div>
+      <label htmlFor={id} className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{label}</label>
+      <div className="relative">{children}</div>
     </div>
   )
 }
 
 // ── Icons ─────────────────────────────────────────────────────────────────
 
-function PersonIcon() {
-  return (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-        d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
-    </svg>
-  )
-}
-
-function MailIcon() {
-  return (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-        d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
-    </svg>
-  )
-}
-
-function PhoneIcon() {
-  return (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-        d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
-    </svg>
-  )
-}
-
-function MapPinIcon() {
-  return (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-        d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-        d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
-    </svg>
-  )
-}
-
-function HomeIcon() {
-  return (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-        d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
-    </svg>
-  )
-}
-
-function LockIcon() {
-  return (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-        d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
-    </svg>
-  )
-}
+function PersonIcon()  { return <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" /></svg> }
+function MailIcon()    { return <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" /></svg> }
+function PhoneIcon()   { return <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" /></svg> }
+function MapPinIcon()  { return <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" /></svg> }
+function HomeIcon()    { return <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" /></svg> }
+function LockIcon()    { return <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg> }
+function IdIcon()      { return <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 9h3.75M15 12h3.75M15 15h3.75M4.5 19.5h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5zm6-10.125a1.875 1.875 0 11-3.75 0 1.875 1.875 0 013.75 0zm1.294 6.336a6.721 6.721 0 01-3.17.789 6.721 6.721 0 01-3.168-.789 3.376 3.376 0 016.338 0z" /></svg> }
 
 function EyeIcon({ open }: { open: boolean }) {
   return open ? (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-        d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-    </svg>
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
   ) : (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-        d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
-    </svg>
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" /></svg>
   )
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────
 
+type Mode = 'select' | 'patient' | 'doctor'
+
 export default function RegistroPage() {
-  const navigate = useNavigate()
+  const navigate        = useNavigate()
+  const [searchParams]  = useSearchParams()
   const { profile, loading, refreshProfile } = useAuth()
 
-  const [fullName, setFullName]                     = useState('')
-  const [email, setEmail]                           = useState('')
-  const [phone, setPhone]                           = useState('')
-  const [city, setCity]                             = useState('')
-  const [deliveryAddress, setDeliveryAddress]       = useState('')
-  const [password, setPassword]                     = useState('')
-  const [confirmPassword, setConfirmPassword]       = useState('')
-  const [showPwd, setShowPwd]                       = useState(false)
-  const [showConfirmPwd, setShowConfirmPwd]         = useState(false)
-  const [submitting, setSubmitting]                 = useState(false)
-  const [error, setError]                           = useState<string | null>(null)
-  const [emailExists, setEmailExists]               = useState(false)
+  // Derive initial mode from ?role= param
+  const roleParam = searchParams.get('role')
+  const [mode, setMode] = useState<Mode>(
+    roleParam === 'doctor' ? 'doctor' : roleParam === 'patient' ? 'patient' : 'select'
+  )
+
+  // Shared fields
+  const [fullName,         setFullName]         = useState('')
+  const [email,            setEmail]            = useState('')
+  const [phone,            setPhone]            = useState('')
+  const [password,         setPassword]         = useState('')
+  const [confirmPassword,  setConfirmPassword]  = useState('')
+  const [showPwd,          setShowPwd]          = useState(false)
+  const [showConfirmPwd,   setShowConfirmPwd]   = useState(false)
+  const [submitting,       setSubmitting]       = useState(false)
+  const [error,            setError]            = useState<string | null>(null)
+  const [emailExists,      setEmailExists]      = useState(false)
+
+  // Patient-only fields
+  const [city,            setCity]            = useState('')
+  const [deliveryAddress, setDeliveryAddress] = useState('')
+
+  // Doctor-only fields
+  const [specialty,   setSpecialty]   = useState('')
+  const [university,  setUniversity]  = useState('')
+  const [medLicense,  setMedLicense]  = useState('')
 
   useEffect(() => {
     if (!loading && profile) navigate(roleHome[profile.role], { replace: true })
   }, [loading, profile, navigate])
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setError(null)
-    setEmailExists(false)
-
-    if (password !== confirmPassword) {
-      setError('Las contraseñas no coinciden.')
-      return
-    }
-    if (password.length < 6) {
-      setError('La contraseña debe tener al menos 6 caracteres.')
-      return
-    }
-
-    setSubmitting(true)
-
-    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({ email, password })
-
-    if (signUpError || !signUpData.user) {
-      const msg = (signUpError?.message ?? '').toLowerCase()
-      if (msg.includes('already registered') || msg.includes('already exists')) {
-        setEmailExists(true)
-        setError('Este correo ya está registrado.')
-      } else if (msg.includes('password')) {
-        setError('La contraseña debe tener al menos 6 caracteres.')
-      } else {
-        setError('No se pudo crear la cuenta. Intenta de nuevo.')
-      }
-      setSubmitting(false)
-      return
-    }
-
-    if (!signUpData.session) {
-      setError('Revisa tu correo para confirmar tu cuenta antes de iniciar sesión.')
-      setSubmitting(false)
-      return
-    }
-
-    const { error: profileError } = await supabase.from('profiles').upsert(
-      {
-        id:               signUpData.user.id,
-        full_name:        fullName.trim(),
-        email,
-        phone:            phone.trim() || null,
-        city:             city.trim() || null,
-        delivery_address: deliveryAddress.trim() || null,
-        role:             'patient',
-      },
-      { onConflict: 'id' },
-    )
-
-    if (profileError) {
-      setError('Cuenta creada, pero hubo un error al guardar el perfil. Intenta iniciar sesión.')
-      setSubmitting(false)
-      return
-    }
-
-    await refreshProfile()
-    navigate('/paciente/dashboard', { replace: true })
-  }
 
   if (loading) {
     return (
@@ -216,39 +100,216 @@ export default function RegistroPage() {
     )
   }
 
+  // ── Role selector ────────────────────────────────────────────────────────
+  if (mode === 'select') {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center px-4 py-12" style={BG}>
+        <Link to="/" className="fixed top-4 left-4 z-10 flex items-center gap-1.5 text-white/90 hover:text-white text-sm font-medium hover:underline transition-colors">
+          ← Volver al inicio
+        </Link>
+
+        <Link to="/" className="mb-8"><Logo /></Link>
+
+        <div className="w-full max-w-2xl">
+          <div className="text-center mb-8">
+            <h1 className="text-2xl font-bold text-white mb-2">¿Cómo quieres unirte a Contigo?</h1>
+            <p className="text-white/70 text-sm">Elige tu rol para comenzar</p>
+          </div>
+
+          <div className="grid sm:grid-cols-2 gap-4">
+            {/* Patient card */}
+            <button
+              onClick={() => setMode('patient')}
+              className="group bg-white rounded-2xl p-8 text-left hover:border-blue-400 border-2 border-transparent transition-all hover:shadow-xl hover:-translate-y-0.5 duration-200"
+            >
+              <div className="text-5xl mb-4">🧑‍⚕️</div>
+              <h2 className="text-lg font-bold text-slate-900 mb-1">Soy paciente</h2>
+              <p className="text-slate-500 text-sm mb-6 leading-relaxed">
+                Accede a citas médicas desde casa y recibe tus medicamentos a domicilio.
+              </p>
+              <div className="w-full py-3 bg-blue-600 group-hover:bg-blue-700 text-white font-semibold rounded-xl text-sm text-center transition-colors">
+                Registrarme como paciente
+              </div>
+            </button>
+
+            {/* Doctor card */}
+            <button
+              onClick={() => setMode('doctor')}
+              className="group bg-white rounded-2xl p-8 text-left hover:border-emerald-400 border-2 border-transparent transition-all hover:shadow-xl hover:-translate-y-0.5 duration-200"
+            >
+              <div className="text-5xl mb-4">👨‍⚕️</div>
+              <h2 className="text-lg font-bold text-slate-900 mb-1">Soy médico</h2>
+              <p className="text-slate-500 text-sm mb-6 leading-relaxed">
+                Atiende pacientes en línea y genera ingresos con una agenda flexible.
+              </p>
+              <div className="w-full py-3 bg-emerald-600 group-hover:bg-emerald-700 text-white font-semibold rounded-xl text-sm text-center transition-colors">
+                Registrarme como médico
+              </div>
+            </button>
+          </div>
+
+          <p className="text-center mt-6 text-sm text-white/70">
+            ¿Ya tienes cuenta?{' '}
+            <Link to="/login" className="text-white font-semibold hover:underline">Iniciar sesión →</Link>
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Shared submit validation ─────────────────────────────────────────────
+  function validateBase(): boolean {
+    if (password !== confirmPassword) { setError('Las contraseñas no coinciden.'); return false }
+    if (password.length < 6)          { setError('La contraseña debe tener al menos 6 caracteres.'); return false }
+    return true
+  }
+
+  // ── Patient submit ───────────────────────────────────────────────────────
+  async function handlePatientSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    setEmailExists(false)
+    if (!validateBase()) return
+    setSubmitting(true)
+
+    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({ email, password })
+    if (signUpError || !signUpData.user) {
+      const msg = (signUpError?.message ?? '').toLowerCase()
+      if (msg.includes('already registered') || msg.includes('already exists')) {
+        setEmailExists(true); setError('Este correo ya está registrado.')
+      } else if (msg.includes('password')) {
+        setError('La contraseña debe tener al menos 6 caracteres.')
+      } else {
+        setError('No se pudo crear la cuenta. Intenta de nuevo.')
+      }
+      setSubmitting(false); return
+    }
+    if (!signUpData.session) {
+      setError('Revisa tu correo para confirmar tu cuenta antes de iniciar sesión.')
+      setSubmitting(false); return
+    }
+
+    const { error: profileError } = await supabase.from('profiles').upsert(
+      { id: signUpData.user.id, full_name: fullName.trim(), email, phone: phone.trim() || null, city: city.trim() || null, delivery_address: deliveryAddress.trim() || null, role: 'patient', onboarding_completed: false },
+      { onConflict: 'id' }
+    )
+    if (profileError) {
+      setError('Cuenta creada, pero hubo un error al guardar el perfil. Intenta iniciar sesión.')
+      setSubmitting(false); return
+    }
+
+    await refreshProfile()
+    navigate('/paciente/dashboard', { replace: true })
+  }
+
+  // ── Doctor submit ────────────────────────────────────────────────────────
+  async function handleDoctorSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    setEmailExists(false)
+    if (!specialty)    { setError('Selecciona tu especialidad.'); return }
+    if (!university.trim()) { setError('Ingresa tu universidad de pregrado.'); return }
+    if (!medLicense.trim()) { setError('Ingresa tu número de tarjeta profesional.'); return }
+    if (!validateBase()) return
+    setSubmitting(true)
+
+    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({ email, password })
+    if (signUpError || !signUpData.user) {
+      const msg = (signUpError?.message ?? '').toLowerCase()
+      if (msg.includes('already registered') || msg.includes('already exists')) {
+        setEmailExists(true); setError('Este correo ya está registrado.')
+      } else if (msg.includes('password')) {
+        setError('La contraseña debe tener al menos 6 caracteres.')
+      } else {
+        setError('No se pudo crear la cuenta. Intenta de nuevo.')
+      }
+      setSubmitting(false); return
+    }
+    if (!signUpData.session) {
+      setError('Revisa tu correo para confirmar tu cuenta antes de iniciar sesión.')
+      setSubmitting(false); return
+    }
+
+    const { error: profileError } = await supabase.from('profiles').upsert(
+      {
+        id: signUpData.user.id,
+        full_name: fullName.trim(),
+        email,
+        phone: phone.trim() || null,
+        specialty,
+        undergraduate_university: university.trim(),
+        medical_license: medLicense.trim(),
+        role: 'doctor',
+        doctor_status: 'pending',
+        onboarding_completed: false,
+      },
+      { onConflict: 'id' }
+    )
+    if (profileError) {
+      setError('Cuenta creada, pero hubo un error al guardar el perfil. Intenta iniciar sesión.')
+      setSubmitting(false); return
+    }
+
+    // Notify admin
+    try {
+      await supabase.functions.invoke('send-email', {
+        body: {
+          to: 'simoncarbone1998@gmail.com',
+          subject: '🩺 Nuevo médico pendiente de aprobación — Contigo',
+          html: `
+            <p>Un nuevo médico se ha registrado y está pendiente de aprobación.</p>
+            <br/>
+            <p><strong>Nombre:</strong> ${fullName.trim()}</p>
+            <p><strong>Email:</strong> ${email}</p>
+            <p><strong>Especialidad:</strong> ${specialty}</p>
+            <p><strong>Universidad:</strong> ${university.trim()}</p>
+            <p><strong>Tarjeta profesional:</strong> ${medLicense.trim()}</p>
+            <br/>
+            <p>Aprueba o rechaza en el panel de administración:<br/>
+            <a href="https://contigomedicina.com/admin/dashboard">contigomedicina.com/admin/dashboard</a></p>
+          `,
+        },
+      })
+    } catch { /* non-critical — don't block registration */ }
+
+    await refreshProfile()
+    navigate('/doctor/pending', { replace: true })
+  }
+
+  // ── Shared form chrome ───────────────────────────────────────────────────
+  const isDoctor  = mode === 'doctor'
+  const title     = isDoctor ? 'Registro de médico' : 'Crea tu cuenta'
+  const subtitle  = isDoctor ? 'Completa tu información profesional' : 'Únete a Contigo y recupera el control de tu salud'
+  const onSubmit  = isDoctor ? handleDoctorSubmit : handlePatientSubmit
+
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-12" style={BG}>
-
-      {/* Back button — fixed top-left */}
-      <Link
-        to="/"
-        className="fixed top-4 left-4 z-10 flex items-center gap-1.5 text-white/90 hover:text-white text-sm font-medium hover:underline transition-colors"
-      >
+      <Link to="/" className="fixed top-4 left-4 z-10 flex items-center gap-1.5 text-white/90 hover:text-white text-sm font-medium hover:underline transition-colors">
         ← Volver al inicio
       </Link>
 
-      {/* Logo + Card */}
       <div className="flex flex-col items-center w-full max-w-md">
+        <Link to="/" className="mb-6"><Logo /></Link>
 
-        <Link to="/" className="mb-6">
-          <Logo />
-        </Link>
+        <div className="w-full bg-white rounded-2xl shadow-2xl px-8 py-10" style={{ maxHeight: '90vh', overflowY: 'auto' }}>
 
-        {/* Card — scrollable on mobile for the long form */}
-        <div className="w-full bg-white rounded-2xl shadow-2xl px-8 py-10"
-          style={{ maxHeight: '85vh', overflowY: 'auto' }}>
+          {/* Back to role selector */}
+          <button onClick={() => setMode('select')} className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 mb-6 transition-colors">
+            ← Cambiar rol
+          </button>
 
-          {/* Header */}
-          <div className="text-center mb-8">
-            <h1 className="text-2xl font-bold" style={{ color: '#1e3a5f' }}>
-              Crea tu cuenta
-            </h1>
-            <p className="text-slate-500 text-sm mt-1">
-              Únete a Contigo y recupera el control de tu salud
-            </p>
+          {/* Role pill */}
+          <div className="flex justify-center mb-6">
+            <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${isDoctor ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>
+              {isDoctor ? '👨‍⚕️ Médico' : '🧑‍⚕️ Paciente'}
+            </span>
           </div>
 
-          {/* Error */}
+          <div className="text-center mb-8">
+            <h1 className="text-2xl font-bold" style={{ color: '#1e3a5f' }}>{title}</h1>
+            <p className="text-slate-500 text-sm mt-1">{subtitle}</p>
+          </div>
+
           {error && (
             <div className="mb-6 flex gap-2.5 p-3.5 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
               <svg className="w-4 h-4 shrink-0 mt-0.5 text-red-500" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -256,159 +317,134 @@ export default function RegistroPage() {
               </svg>
               <span>
                 {error}{' '}
-                {emailExists && (
-                  <Link to="/login" className="font-semibold underline hover:text-red-800 transition-colors">
-                    ¿Quieres iniciar sesión?
-                  </Link>
-                )}
+                {emailExists && <Link to="/login" className="font-semibold underline hover:text-red-800 transition-colors">¿Quieres iniciar sesión?</Link>}
               </span>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={onSubmit} className="space-y-4">
 
-            {/* 1. Nombre completo */}
+            {/* Nombre */}
             <Field id="fullName" label="Nombre completo" icon={<PersonIcon />}>
-              <input
-                id="fullName"
-                type="text"
-                autoComplete="name"
-                required
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                placeholder="Juan Pérez"
-                className={`${inputCls} pl-10 pr-4`}
-              />
+              <input id="fullName" type="text" autoComplete="name" required value={fullName}
+                onChange={(e) => setFullName(e.target.value)} placeholder="Dr. Juan Pérez"
+                className={`${inputCls} pl-10 pr-4`} style={{ paddingLeft: '2.5rem' }} />
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><PersonIcon /></span>
             </Field>
 
-            {/* 2. Correo electrónico */}
+            {/* Correo */}
             <Field id="email" label="Correo electrónico" icon={<MailIcon />}>
-              <input
-                id="email"
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="tu@correo.com"
-                className={`${inputCls} pl-10 pr-4`}
-              />
+              <input id="email" type="email" autoComplete="email" required value={email}
+                onChange={(e) => setEmail(e.target.value)} placeholder="tu@correo.com"
+                className={`${inputCls} pl-10 pr-4`} style={{ paddingLeft: '2.5rem' }} />
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><MailIcon /></span>
             </Field>
 
-            {/* 3. Teléfono */}
+            {/* Teléfono */}
             <Field id="phone" label="Teléfono" icon={<PhoneIcon />}>
-              <input
-                id="phone"
-                type="tel"
-                autoComplete="tel"
-                required
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="ej: 3001234567"
-                className={`${inputCls} pl-10 pr-4`}
-              />
+              <input id="phone" type="tel" autoComplete="tel" required value={phone}
+                onChange={(e) => setPhone(e.target.value)} placeholder="ej: 3001234567"
+                className={`${inputCls} pl-10 pr-4`} style={{ paddingLeft: '2.5rem' }} />
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><PhoneIcon /></span>
             </Field>
 
-            {/* 4. Ciudad */}
-            <Field id="city" label="Ciudad" icon={<MapPinIcon />}>
-              <input
-                id="city"
-                type="text"
-                autoComplete="address-level2"
-                required
-                value={city}
-                onChange={(e) => setCity(e.target.value)}
-                placeholder="ej: Bogotá"
-                className={`${inputCls} pl-10 pr-4`}
-              />
-            </Field>
+            {/* Patient-only fields */}
+            {!isDoctor && (
+              <>
+                <Field id="city" label="Ciudad" icon={<MapPinIcon />}>
+                  <input id="city" type="text" autoComplete="address-level2" required value={city}
+                    onChange={(e) => setCity(e.target.value)} placeholder="ej: Bogotá"
+                    className={`${inputCls} pl-10 pr-4`} style={{ paddingLeft: '2.5rem' }} />
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><MapPinIcon /></span>
+                </Field>
+                <Field id="deliveryAddress" label="Dirección" icon={<HomeIcon />}>
+                  <input id="deliveryAddress" type="text" autoComplete="street-address" required value={deliveryAddress}
+                    onChange={(e) => setDeliveryAddress(e.target.value)} placeholder="ej: Calle 123 #45-67, Apto 201"
+                    className={`${inputCls} pl-10 pr-4`} style={{ paddingLeft: '2.5rem' }} />
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><HomeIcon /></span>
+                </Field>
+              </>
+            )}
 
-            {/* 5. Dirección */}
-            <Field id="deliveryAddress" label="Dirección" icon={<HomeIcon />}>
-              <input
-                id="deliveryAddress"
-                type="text"
-                autoComplete="street-address"
-                required
-                value={deliveryAddress}
-                onChange={(e) => setDeliveryAddress(e.target.value)}
-                placeholder="ej: Calle 123 #45-67, Apto 201"
-                className={`${inputCls} pl-10 pr-4`}
-              />
-            </Field>
+            {/* Doctor-only fields */}
+            {isDoctor && (
+              <>
+                <div>
+                  <label htmlFor="specialty" className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Especialidad</label>
+                  <select id="specialty" required value={specialty} onChange={(e) => setSpecialty(e.target.value)}
+                    className={`${inputCls} px-4`}>
+                    <option value="">Seleccionar especialidad...</option>
+                    {SPECIALTIES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                  </select>
+                </div>
 
-            {/* 6. Contraseña */}
+                <Field id="university" label="Universidad de pregrado" icon={<IdIcon />}>
+                  <input id="university" type="text" required value={university}
+                    onChange={(e) => setUniversity(e.target.value)} placeholder="ej: Universidad Nacional de Colombia"
+                    className={`${inputCls} pl-10 pr-4`} style={{ paddingLeft: '2.5rem' }} />
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><IdIcon /></span>
+                </Field>
+
+                <Field id="medLicense" label="Número de tarjeta profesional" icon={<IdIcon />}>
+                  <input id="medLicense" type="text" required value={medLicense}
+                    onChange={(e) => setMedLicense(e.target.value)} placeholder="ej: 12345-2024"
+                    className={`${inputCls} pl-10 pr-4`} style={{ paddingLeft: '2.5rem' }} />
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><IdIcon /></span>
+                  <p className="mt-1 text-xs text-slate-400">Tu número de registro médico en Colombia</p>
+                </Field>
+              </>
+            )}
+
+            {/* Contraseña */}
             <Field id="password" label="Contraseña" icon={<LockIcon />}>
-              <input
-                id="password"
-                type={showPwd ? 'text' : 'password'}
-                autoComplete="new-password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className={`${inputCls} pl-10 pr-11`}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPwd(!showPwd)}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                aria-label={showPwd ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-              >
+              <input id="password" type={showPwd ? 'text' : 'password'} autoComplete="new-password" required value={password}
+                onChange={(e) => setPassword(e.target.value)} placeholder="••••••••"
+                className={`${inputCls} pl-10 pr-11`} style={{ paddingLeft: '2.5rem' }} />
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><LockIcon /></span>
+              <button type="button" onClick={() => setShowPwd(!showPwd)}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors" aria-label="Toggle password">
                 <EyeIcon open={showPwd} />
               </button>
               <p className="mt-1.5 text-xs text-slate-400">Mínimo 6 caracteres</p>
             </Field>
 
-            {/* 7. Confirmar contraseña */}
+            {/* Confirmar contraseña */}
             <Field id="confirmPassword" label="Confirmar contraseña" icon={<LockIcon />}>
-              <input
-                id="confirmPassword"
-                type={showConfirmPwd ? 'text' : 'password'}
-                autoComplete="new-password"
-                required
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="••••••••"
-                className={`${inputCls} pl-10 pr-11`}
-              />
-              <button
-                type="button"
-                onClick={() => setShowConfirmPwd(!showConfirmPwd)}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                aria-label={showConfirmPwd ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-              >
+              <input id="confirmPassword" type={showConfirmPwd ? 'text' : 'password'} autoComplete="new-password" required value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)} placeholder="••••••••"
+                className={`${inputCls} pl-10 pr-11`} style={{ paddingLeft: '2.5rem' }} />
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><LockIcon /></span>
+              <button type="button" onClick={() => setShowConfirmPwd(!showConfirmPwd)}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors" aria-label="Toggle password">
                 <EyeIcon open={showConfirmPwd} />
               </button>
             </Field>
 
-            {/* Submit */}
-            <button
-              type="submit"
-              disabled={submitting}
+            {isDoctor && (
+              <p className="text-xs text-slate-500 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+                ⏳ Tu cuenta será revisada por nuestro equipo antes de ser activada. Te notificaremos por email.
+              </p>
+            )}
+
+            <button type="submit" disabled={submitting}
               className="w-full mt-2 text-white font-semibold py-3.5 rounded-xl text-sm transition-all hover:shadow-lg hover:scale-[1.01] active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed disabled:scale-100"
-              style={BTN_BG}
-            >
+              style={BTN_BG}>
               {submitting ? (
                 <span className="flex items-center justify-center gap-2">
                   <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
-                  Creando cuenta...
+                  {isDoctor ? 'Enviando solicitud...' : 'Creando cuenta...'}
                 </span>
-              ) : 'Crear cuenta'}
+              ) : (isDoctor ? 'Enviar solicitud' : 'Crear cuenta')}
             </button>
           </form>
 
-          {/* Login link */}
           <p className="mt-7 text-sm text-center text-slate-500">
             ¿Ya tienes cuenta?{' '}
-            <Link to="/login" className="font-semibold text-blue-700 hover:text-blue-800 hover:underline transition-colors">
-              Inicia sesión aquí
-            </Link>
+            <Link to="/login" className="font-semibold text-blue-700 hover:text-blue-800 hover:underline transition-colors">Inicia sesión aquí</Link>
           </p>
-
         </div>
       </div>
     </div>

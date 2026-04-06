@@ -22,16 +22,25 @@ export default function RequireRole({ role }: { role: Role }) {
   if (!session) return <Navigate to="/login" replace />
   if (!profile) return <LoadingSpinner message="Cargando perfil..." />
 
-  // Wrong role — redirect to their home
+  // Wrong role → redirect to their home
   if (profile.role !== role) {
     return <Navigate to={roleHome[profile.role]} replace />
   }
 
-  // Onboarding redirect for patients and doctors
+  // Doctor approval gate
+  // null = legacy / pre-approval-system doctor → treat as approved
+  if (role === 'doctor') {
+    const status = profile.doctor_status
+    if (status === 'pending' || status === 'rejected') {
+      if (pathname !== '/doctor/pending') return <Navigate to="/doctor/pending" replace />
+      // Already on /doctor/pending — render it, skip onboarding check
+      return <Outlet />
+    }
+  }
+
+  // Onboarding redirect for patients and approved doctors
   const obPath = onboardingPath[role]
   if (obPath && !profile.onboarding_completed && pathname !== obPath) {
-    // Use sessionStorage so skipping onboarding doesn't cause an infinite redirect loop.
-    // On the next fresh session (new login) the redirect fires again until they complete it.
     const seenKey = `ob-seen-${profile.id}`
     if (!sessionStorage.getItem(seenKey)) {
       sessionStorage.setItem(seenKey, '1')

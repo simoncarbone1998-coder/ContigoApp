@@ -87,6 +87,14 @@ export default function LandingPage() {
 
           {/* Right */}
           <div className="flex items-center gap-3">
+            <Link to="/registro?role=doctor"
+              className={`hidden md:inline-flex items-center px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
+                scrolled
+                  ? 'text-emerald-700 hover:bg-emerald-50'
+                  : 'text-white/75 hover:text-white hover:bg-white/10'
+              }`}>
+              ¿Eres médico?
+            </Link>
             <Link to="/login"
               className={`hidden md:inline-flex items-center px-5 py-2 rounded-xl text-sm font-semibold transition-all duration-200 border-2 ${
                 scrolled
@@ -133,6 +141,10 @@ export default function LandingPage() {
                 <Link to="/registro"
                   className="px-4 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold text-center transition-colors">
                   Comenzar ahora
+                </Link>
+                <Link to="/registro?role=doctor"
+                  className="px-4 py-3 rounded-xl border border-emerald-200 text-emerald-700 text-sm font-semibold text-center hover:bg-emerald-50 transition-colors">
+                  ¿Eres médico? Únete aquí
                 </Link>
               </div>
             </nav>

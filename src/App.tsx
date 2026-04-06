@@ -13,6 +13,7 @@ import PatientPastillasPage  from './pages/paciente/PastillasPage'
 import PatientExamenesPage   from './pages/paciente/ExamenesPage'
 
 // Doctor pages
+import DoctorPendingPage  from './pages/doctor/PendingPage'
 import DoctorSetupPage   from './pages/doctor/SetupEspecialidadPage'
 import DoctorPerfilPage  from './pages/doctor/PerfilPage'
 import DoctorAgendaPage  from './pages/doctor/AgendaPage'
@@ -48,6 +49,7 @@ export default function App() {
 
       {/* Doctor routes */}
       <Route element={<RequireRole role="doctor" />}>
+        <Route path="/doctor/pending"    element={<DoctorPendingPage />} />
         <Route path="/doctor/onboarding" element={<DoctorOnboarding />} />
         <Route path="/doctor/setup"    element={<DoctorSetupPage />} />
         <Route path="/doctor/perfil"   element={<DoctorPerfilPage />} />

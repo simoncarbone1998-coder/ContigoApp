@@ -40,6 +40,11 @@ export interface Profile {
   doctor_description: string | null
   delivery_address: string | null
   onboarding_completed: boolean
+  doctor_status: 'pending' | 'approved' | 'rejected' | null
+  medical_license: string | null
+  approved_at: string | null
+  rejected_at: string | null
+  rejection_reason: string | null
   created_at: string
 }
 
