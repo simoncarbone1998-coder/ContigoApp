@@ -32,6 +32,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .single()
 
     if (data) {
+      console.log('[Contigo] Profile loaded:', {
+        id: data.id,
+        role: data.role,
+        onboarding_completed: data.onboarding_completed,
+      })
       setProfile(data as Profile)
     } else {
       // Trigger may not have fired yet — upsert defensively

@@ -39,6 +39,7 @@ export interface Profile {
   postgraduate_specialty: string | null
   doctor_description: string | null
   delivery_address: string | null
+  onboarding_completed: boolean
   created_at: string
 }
 

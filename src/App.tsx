@@ -21,6 +21,10 @@ import DoctorFinanzasPage from './pages/doctor/FinanzasPage'
 // Admin pages
 import AdminDashboard from './pages/admin/DashboardPage'
 
+// Onboarding
+import PatientOnboarding from './components/onboarding/PatientOnboarding'
+import DoctorOnboarding  from './components/onboarding/DoctorOnboarding'
+
 export default function App() {
   return (
     <Routes>
@@ -31,6 +35,7 @@ export default function App() {
 
       {/* Patient routes */}
       <Route element={<RequireRole role="patient" />}>
+        <Route path="/paciente/onboarding"  element={<PatientOnboarding />} />
         <Route path="/paciente/perfil"      element={<PatientPerfilPage />} />
         <Route path="/paciente/agendar"     element={<PatientAgendarPage />} />
         <Route path="/paciente/calendario"  element={<PatientCalendarioPage />} />
@@ -43,6 +48,7 @@ export default function App() {
 
       {/* Doctor routes */}
       <Route element={<RequireRole role="doctor" />}>
+        <Route path="/doctor/onboarding" element={<DoctorOnboarding />} />
         <Route path="/doctor/setup"    element={<DoctorSetupPage />} />
         <Route path="/doctor/perfil"   element={<DoctorPerfilPage />} />
         <Route path="/doctor/agenda"   element={<DoctorAgendaPage />} />
