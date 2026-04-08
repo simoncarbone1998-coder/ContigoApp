@@ -22,6 +22,18 @@ import DoctorFinanzasPage from './pages/doctor/FinanzasPage'
 // Admin pages
 import AdminDashboard from './pages/admin/DashboardPage'
 
+// Lab portal pages
+import RequireLab         from './components/RequireLab'
+import LabLoginPage       from './pages/lab/LoginPage'
+import LabRegistroPage    from './pages/lab/RegistroPage'
+import LabPendingPage     from './pages/lab/PendingPage'
+import LabRejectedPage    from './pages/lab/RejectedPage'
+import LabDashboardPage   from './pages/lab/DashboardPage'
+import LabOrdenesPage     from './pages/lab/OrdenesPage'
+import LabAgendaPage      from './pages/lab/AgendaPage'
+import LabHistorialPage   from './pages/lab/HistorialPage'
+import LabPerfilPage      from './pages/lab/PerfilPage'
+
 // Onboarding
 import PatientOnboarding from './components/onboarding/PatientOnboarding'
 import DoctorOnboarding  from './components/onboarding/DoctorOnboarding'
@@ -63,6 +75,22 @@ export default function App() {
       {/* Admin routes */}
       <Route element={<RequireRole role="admin" />}>
         <Route path="/admin/dashboard" element={<AdminDashboard />} />
+      </Route>
+
+      {/* Lab portal — public */}
+      <Route path="/lab"          element={<Navigate to="/lab/login" replace />} />
+      <Route path="/lab/login"    element={<LabLoginPage />} />
+      <Route path="/lab/registro" element={<LabRegistroPage />} />
+
+      {/* Lab portal — protected */}
+      <Route element={<RequireLab />}>
+        <Route path="/lab/pending"   element={<LabPendingPage />} />
+        <Route path="/lab/rejected"  element={<LabRejectedPage />} />
+        <Route path="/lab/dashboard" element={<LabDashboardPage />} />
+        <Route path="/lab/ordenes"   element={<LabOrdenesPage />} />
+        <Route path="/lab/agenda"    element={<LabAgendaPage />} />
+        <Route path="/lab/historial" element={<LabHistorialPage />} />
+        <Route path="/lab/perfil"    element={<LabPerfilPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/login" replace />} />

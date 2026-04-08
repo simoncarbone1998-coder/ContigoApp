@@ -3,29 +3,14 @@ import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import NavBar from '../../components/NavBar'
 
-// ── Constants ─────────────────────────────────────────────────────────────────
-
-const LABS = [
-  'LabClínicos Bogotá Norte',
-  'Laboratorio Colsanitas Chapinero',
-  'Labs Santa Fe Centro',
-  'Laboratorio Medilaser Suba',
-  'LabClínicos Bogotá Sur',
-]
-
-function getFakeSlots() {
-  const days = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
-  const tom  = new Date(); tom.setDate(tom.getDate() + 1)
-  const day2 = new Date(); day2.setDate(day2.getDate() + 2)
-  const label = (d: Date) => `${d.getDate()}/${d.getMonth() + 1} (${days[d.getDay()]})`
-  return [
-    { short: 'Mañana 8:00 AM',         full: `${label(tom)} · 8:00 AM` },
-    { short: 'Mañana 9:30 AM',         full: `${label(tom)} · 9:30 AM` },
-    { short: 'Mañana 11:00 AM',        full: `${label(tom)} · 11:00 AM` },
-    { short: 'Pasado mañana 8:00 AM',  full: `${label(day2)} · 8:00 AM` },
-    { short: 'Pasado mañana 10:00 AM', full: `${label(day2)} · 10:00 AM` },
-    { short: 'Pasado mañana 2:00 PM',  full: `${label(day2)} · 2:00 PM` },
-  ]
+// ── Types ─────────────────────────────────────────────────────────────────────
+type RealLab = {
+  id: string
+  name: string
+  address: string
+  city: string
+  phone: string
+  available_slots: { id: string; date: string; start_time: string }[] | null
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -69,8 +54,10 @@ export default function PatientExamenesPage() {
 
   // Schedule modal
   const [scheduleOrder, setScheduleOrder] = useState<DiagOrder | null>(null)
-  const [selectedLab,   setSelectedLab]   = useState('')
-  const [selectedSlot,  setSelectedSlot]  = useState<number | null>(null)
+  const [realLabs,      setRealLabs]      = useState<RealLab[]>([])
+  const [labsLoading,   setLabsLoading]   = useState(false)
+  const [selectedLabId, setSelectedLabId] = useState('')
+  const [selectedSlotId,setSelectedSlotId]= useState('')
   const [scheduling,    setScheduling]    = useState(false)
   const [scheduleOk,    setScheduleOk]    = useState<string | null>(null)
 
@@ -113,15 +100,33 @@ export default function PatientExamenesPage() {
 
   useEffect(() => { fetchOrders() }, [fetchOrders])
 
+  async function fetchRealLabs(order: DiagOrder) {
+    if (!profile) return
+    setLabsLoading(true)
+    const { data } = await supabase.rpc('get_real_labs_for_patient', {
+      p_city:      profile.city ?? '',
+      p_exam_type: order.exam_type,
+    })
+    setRealLabs((data as RealLab[]) ?? [])
+    setLabsLoading(false)
+  }
+
   async function handleSchedule() {
-    if (!scheduleOrder || !selectedLab || selectedSlot === null) return
+    if (!scheduleOrder || !selectedLabId || !selectedSlotId || !profile) return
     setScheduling(true)
-    const slots = getFakeSlots()
-    const slot  = slots[selectedSlot]
-    await supabase.from('diagnostic_orders').update({ status: 'scheduled' }).eq('id', scheduleOrder.id)
-    setScheduleOk(
-      `✅ Tu examen ha sido agendado en ${selectedLab} el ${slot.full}.\nEl laboratorio te contactará para confirmar los detalles.`
-    )
+    const lab  = realLabs.find((l) => l.id === selectedLabId)
+    const slot = lab?.available_slots?.find((s) => s.id === selectedSlotId)
+
+    await supabase.rpc('schedule_lab_appointment', {
+      p_diagnostic_order_id: scheduleOrder.id,
+      p_laboratory_id:       selectedLabId,
+      p_lab_slot_id:         selectedSlotId,
+      p_patient_id:          profile.id,
+      p_exam_name:           scheduleOrder.exam_type,
+    })
+
+    const dateStr = slot?.date ? (() => { const [y,m,d] = slot.date.split('-'); return `${d}/${m}/${y}` })() : '—'
+    setScheduleOk(`✅ Tu examen ha sido agendado en ${lab?.name ?? 'el centro'} el ${dateStr} a las ${slot?.start_time?.slice(0,5) ?? '—'}.`)
     await fetchOrders()
     setScheduling(false)
   }
@@ -193,7 +198,6 @@ export default function PatientExamenesPage() {
 
   const pending   = orders.filter((o) => o.status === 'pending' || o.status === 'scheduled')
   const completed = orders.filter((o) => o.status === 'completed')
-  const fakeSlots = getFakeSlots()
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -247,9 +251,10 @@ export default function PatientExamenesPage() {
                         <button
                           onClick={() => {
                             setScheduleOrder(order)
-                            setSelectedLab('')
-                            setSelectedSlot(null)
+                            setSelectedLabId('')
+                            setSelectedSlotId('')
                             setScheduleOk(null)
+                            fetchRealLabs(order)
                           }}
                           disabled={order.status === 'scheduled'}
                           className="flex-1 py-2 rounded-lg border border-blue-200 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -345,59 +350,82 @@ export default function PatientExamenesPage() {
                   <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-sm text-emerald-800 whitespace-pre-line">
                     {scheduleOk}
                   </div>
-                  <button
-                    onClick={() => setScheduleOrder(null)}
-                    className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-colors"
-                  >
+                  <button onClick={() => setScheduleOrder(null)}
+                    className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-colors">
                     Listo
+                  </button>
+                </>
+              ) : labsLoading ? (
+                <div className="flex justify-center py-6">
+                  <div className="w-6 h-6 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin" />
+                </div>
+              ) : realLabs.length === 0 ? (
+                <>
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800">
+                    No hay centros disponibles en tu ciudad actualmente. Nos pondremos en contacto contigo pronto.
+                  </div>
+                  <button onClick={() => setScheduleOrder(null)}
+                    className="w-full py-3 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
+                    Cerrar
                   </button>
                 </>
               ) : (
                 <>
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Laboratorio</label>
-                    <select
-                      value={selectedLab}
-                      onChange={(e) => setSelectedLab(e.target.value)}
-                      className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 bg-white transition-colors"
-                    >
-                      <option value="">— Selecciona un laboratorio —</option>
-                      {LABS.map((lab) => <option key={lab} value={lab}>{lab}</option>)}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Horario disponible</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {fakeSlots.map((slot, i) => (
-                        <button
-                          key={i}
-                          onClick={() => setSelectedSlot(i)}
-                          className={`p-3 rounded-xl border text-left text-xs font-medium transition-colors ${
-                            selectedSlot === i
-                              ? 'bg-blue-600 border-blue-600 text-white'
-                              : 'bg-white border-slate-200 text-slate-700 hover:border-blue-300 hover:bg-blue-50'
-                          }`}
-                        >
-                          {slot.short}
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Centro</label>
+                    <div className="space-y-2">
+                      {realLabs.map((lab) => (
+                        <button key={lab.id} type="button"
+                          onClick={() => { setSelectedLabId(lab.id); setSelectedSlotId('') }}
+                          className={`w-full text-left p-3 rounded-xl border transition-colors ${
+                            selectedLabId === lab.id ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-blue-300 hover:bg-blue-50'
+                          }`}>
+                          <p className="text-sm font-semibold text-slate-900">{lab.name}</p>
+                          <p className="text-xs text-slate-500">{lab.address}</p>
+                          {lab.phone && <p className="text-xs text-slate-400">{lab.phone}</p>}
                         </button>
                       ))}
                     </div>
                   </div>
 
+                  {selectedLabId && (() => {
+                    const lab = realLabs.find((l) => l.id === selectedLabId)
+                    const slots = lab?.available_slots ?? []
+                    return slots.length === 0 ? (
+                      <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-3">
+                        Este centro no tiene horarios disponibles.
+                      </p>
+                    ) : (
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Horario disponible</label>
+                        <div className="grid grid-cols-2 gap-2 max-h-44 overflow-y-auto pr-1">
+                          {slots.map((slot) => {
+                            const [y,m,d] = slot.date.split('-')
+                            return (
+                              <button key={slot.id} onClick={() => setSelectedSlotId(slot.id)}
+                                className={`p-3 rounded-xl border text-left text-xs font-medium transition-colors ${
+                                  selectedSlotId === slot.id
+                                    ? 'bg-blue-600 border-blue-600 text-white'
+                                    : 'bg-white border-slate-200 text-slate-700 hover:border-blue-300 hover:bg-blue-50'
+                                }`}>
+                                <div className="font-semibold">{`${d}/${m}/${y}`}</div>
+                                <div className="opacity-80 mt-0.5">{slot.start_time?.slice(0, 5)}</div>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })()}
+
                   <div className="flex gap-3">
-                    <button
-                      onClick={() => setScheduleOrder(null)}
-                      disabled={scheduling}
-                      className="flex-1 py-3 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50"
-                    >
+                    <button onClick={() => setScheduleOrder(null)} disabled={scheduling}
+                      className="flex-1 py-3 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50">
                       Cancelar
                     </button>
-                    <button
-                      onClick={handleSchedule}
-                      disabled={!selectedLab || selectedSlot === null || scheduling}
-                      className="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors disabled:opacity-50"
-                    >
+                    <button onClick={handleSchedule}
+                      disabled={!selectedLabId || !selectedSlotId || scheduling}
+                      className="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors disabled:opacity-50">
                       {scheduling ? 'Agendando...' : 'Confirmar'}
                     </button>
                   </div>

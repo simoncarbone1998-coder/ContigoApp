@@ -49,6 +49,16 @@ export default function AdminDashboard() {
   const [rejectReason,   setRejectReason]   = useState('')
   const [processingId,   setProcessingId]   = useState<string | null>(null)
 
+  // Labs
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [allLabs,         setAllLabs]         = useState<any[]>([])
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [labRejectTarget, setLabRejectTarget] = useState<any | null>(null)
+  const [labRejectReason, setLabRejectReason] = useState('')
+  const [labProcessingId, setLabProcessingId] = useState<string | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [labDetail,       setLabDetail]       = useState<any | null>(null)
+
   // User management state
   const [userSearch, setUserSearch] = useState('')
   const [userRoleFilter, setUserRoleFilter] = useState<Role | 'all'>('all')
@@ -71,7 +81,50 @@ export default function AdminDashboard() {
     setPendingDoctors((data ?? []) as Profile[])
   }, [])
 
-  useEffect(() => { fetchPending() }, [fetchPending])
+  const fetchLabs = useCallback(async () => {
+    const { data } = await supabase.rpc('admin_get_all_labs')
+    setAllLabs((data ?? []) as unknown[])
+  }, [])
+
+  async function handleLabApprove(lab: { id: string; name: string; email: string }) {
+    setLabProcessingId(lab.id)
+    await supabase.rpc('admin_approve_lab', { p_id: lab.id })
+    try {
+      await supabase.functions.invoke('send-email', {
+        body: {
+          to: lab.email,
+          subject: '✅ Tu centro ha sido aprobado — Contigo',
+          html: `<p>¡Bienvenido a Contigo! Tu centro <strong>${lab.name}</strong> ha sido aprobado.</p><p>Ya puedes acceder al portal: <a href="https://contigomedicina.com/lab/login">contigomedicina.com/lab/login</a></p>`,
+        },
+      })
+    } catch { /* non-critical */ }
+    showToast(`✅ ${lab.name} aprobado exitosamente`)
+    setLabProcessingId(null)
+    fetchLabs()
+  }
+
+  async function handleLabRejectConfirm() {
+    if (!labRejectTarget) return
+    const lab = labRejectTarget
+    setLabProcessingId(lab.id)
+    setLabRejectTarget(null)
+    await supabase.rpc('admin_reject_lab', { p_id: lab.id, p_reason: labRejectReason.trim() || null })
+    try {
+      await supabase.functions.invoke('send-email', {
+        body: {
+          to: lab.email,
+          subject: 'Tu solicitud en Contigo',
+          html: `<p>Hola, lamentablemente no pudimos aprobar tu centro.</p>${labRejectReason.trim() ? `<p><strong>Motivo:</strong> ${labRejectReason.trim()}</p>` : ''}<p>Escríbenos a <a href="mailto:hola@contigomedicina.com">hola@contigomedicina.com</a></p>`,
+        },
+      })
+    } catch { /* non-critical */ }
+    showToast('Solicitud de lab rechazada')
+    setLabRejectReason('')
+    setLabProcessingId(null)
+    fetchLabs()
+  }
+
+  useEffect(() => { fetchPending(); fetchLabs() }, [fetchPending, fetchLabs])
 
   async function handleApprove(doctor: Profile) {
     setProcessingId(doctor.id)
@@ -303,6 +356,88 @@ export default function AdminDashboard() {
         </div>
       )}
 
+      {/* Lab reject modal */}
+      {labRejectTarget && (
+        <div className="fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="text-2xl">🚫</div>
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Rechazar centro</h2>
+                <p className="text-sm text-slate-600 mt-1">¿Rechazar <strong>{labRejectTarget.name}</strong>?</p>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Motivo (opcional)</label>
+              <textarea value={labRejectReason} onChange={(e) => setLabRejectReason(e.target.value)}
+                placeholder="Ej: Documentos ilegibles..." rows={3}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 resize-none" />
+            </div>
+            <div className="flex gap-3 pt-1">
+              <button onClick={() => { setLabRejectTarget(null); setLabRejectReason('') }}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50">
+                Cancelar
+              </button>
+              <button onClick={handleLabRejectConfirm} disabled={labProcessingId === labRejectTarget.id}
+                className="flex-1 py-2.5 rounded-xl bg-red-600 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50">
+                Rechazar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lab detail modal */}
+      {labDetail && (
+        <div className="fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4"
+          onClick={() => setLabDetail(null)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold text-slate-900">{labDetail.name}</h2>
+              <button onClick={() => setLabDetail(null)} className="text-slate-400 hover:text-slate-600 text-xl">×</button>
+            </div>
+            <div className="space-y-2 text-sm">
+              {[
+                { label: 'Tipo',     value: labDetail.type === 'laboratorio' ? 'Laboratorio' : labDetail.type === 'imagenes' ? 'Imágenes' : 'Ambos' },
+                { label: 'Ciudad',   value: labDetail.city },
+                { label: 'Teléfono',value: labDetail.phone },
+                { label: 'Email',    value: labDetail.email },
+                { label: 'Exámenes',value: labDetail.exam_count },
+                { label: 'Completados', value: labDetail.completed_count },
+              ].map(({ label, value }) => (
+                <div key={label} className="flex justify-between gap-4 py-1 border-b border-slate-100 last:border-0">
+                  <span className="text-slate-500">{label}</span>
+                  <span className="font-semibold text-slate-800 text-right">{value ?? '—'}</span>
+                </div>
+              ))}
+            </div>
+            {/* Document links */}
+            {(labDetail.camara_comercio_url || labDetail.habilitacion_supersalud_url || labDetail.rut_url) && (
+              <div className="flex flex-wrap gap-2 pt-2">
+                {labDetail.camara_comercio_url && (
+                  <a href={labDetail.camara_comercio_url} target="_blank" rel="noopener noreferrer"
+                    className="text-xs px-3 py-1.5 rounded-lg border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100">
+                    📄 Cámara de Comercio
+                  </a>
+                )}
+                {labDetail.habilitacion_supersalud_url && (
+                  <a href={labDetail.habilitacion_supersalud_url} target="_blank" rel="noopener noreferrer"
+                    className="text-xs px-3 py-1.5 rounded-lg border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100">
+                    📄 Habilitación
+                  </a>
+                )}
+                {labDetail.rut_url && (
+                  <a href={labDetail.rut_url} target="_blank" rel="noopener noreferrer"
+                    className="text-xs px-3 py-1.5 rounded-lg border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100">
+                    📄 RUT
+                  </a>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Reject doctor modal */}
       {rejectTarget && (
         <div className="fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4">
@@ -482,6 +617,17 @@ export default function AdminDashboard() {
               ))}
             </div>
           </div>
+        )}
+
+        {/* Labs section */}
+        {allLabs.length > 0 && (
+          <LabsSection
+            labs={allLabs}
+            processingId={labProcessingId}
+            onApprove={handleLabApprove}
+            onReject={(lab) => { setLabRejectTarget(lab); setLabRejectReason('') }}
+            onDetail={setLabDetail}
+          />
         )}
 
         {/* Tabs + table */}
@@ -680,6 +826,138 @@ function UsersSection({
               })}
             </tbody>
           </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+const LAB_TYPE_LABELS: Record<string, string> = {
+  laboratorio: 'Laboratorio clínico',
+  imagenes:    'Imágenes diagnósticas',
+  ambos:       'Lab + Imágenes',
+}
+const LAB_STATUS_COLORS: Record<string, string> = {
+  pending:  'bg-amber-50 text-amber-700 border-amber-200',
+  approved: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  rejected: 'bg-red-50 text-red-700 border-red-200',
+}
+const LAB_STATUS_LABELS: Record<string, string> = {
+  pending: 'Pendiente', approved: 'Aprobado', rejected: 'Rechazado',
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function LabsSection({ labs, processingId, onApprove, onReject, onDetail }: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  labs: any[]
+  processingId: string | null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onApprove: (lab: any) => void
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onReject: (lab: any) => void
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onDetail: (lab: any) => void
+}) {
+  const pending  = labs.filter((l) => l.status === 'pending')
+  const approved = labs.filter((l) => l.status === 'approved')
+
+  return (
+    <div className="space-y-4">
+      {/* Pending labs */}
+      {pending.length > 0 && (
+        <div className="bg-white rounded-2xl border border-teal-200 shadow-sm overflow-hidden">
+          <div className="flex items-center gap-2 px-6 py-4 border-b border-teal-100 bg-teal-50">
+            <span className="text-lg">🔬</span>
+            <h2 className="text-base font-bold text-slate-900">Centros aliados pendientes de aprobación</h2>
+            <span className="bg-teal-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">{pending.length}</span>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {pending.map((lab) => (
+              <div key={lab.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-6 py-4">
+                <div>
+                  <p className="font-semibold text-slate-900">{lab.name}</p>
+                  <p className="text-sm text-slate-500">{lab.email} · {lab.city}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">{LAB_TYPE_LABELS[lab.type] ?? lab.type}</p>
+                  {/* Exams */}
+                  {lab.exams && lab.exams.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {lab.exams.slice(0, 5).map((e: { exam_name: string }) => (
+                        <span key={e.exam_name} className="text-xs px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">{e.exam_name}</span>
+                      ))}
+                      {lab.exams.length > 5 && <span className="text-xs text-slate-400">+{lab.exams.length - 5} más</span>}
+                    </div>
+                  )}
+                  {/* Document links */}
+                  <div className="flex gap-2 mt-2">
+                    {lab.camara_comercio_url && (
+                      <a href={lab.camara_comercio_url} target="_blank" rel="noopener noreferrer"
+                        className="text-xs px-2 py-1 rounded border border-blue-200 text-blue-700 hover:bg-blue-50">Cámara de Comercio</a>
+                    )}
+                    {lab.habilitacion_supersalud_url && (
+                      <a href={lab.habilitacion_supersalud_url} target="_blank" rel="noopener noreferrer"
+                        className="text-xs px-2 py-1 rounded border border-blue-200 text-blue-700 hover:bg-blue-50">Habilitación</a>
+                    )}
+                    {lab.rut_url && (
+                      <a href={lab.rut_url} target="_blank" rel="noopener noreferrer"
+                        className="text-xs px-2 py-1 rounded border border-blue-200 text-blue-700 hover:bg-blue-50">RUT</a>
+                    )}
+                  </div>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <button onClick={() => onApprove(lab)} disabled={processingId === lab.id}
+                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-colors disabled:opacity-50">
+                    {processingId === lab.id ? '...' : 'Aprobar'}
+                  </button>
+                  <button onClick={() => onReject(lab)} disabled={processingId === lab.id}
+                    className="px-4 py-2 rounded-xl border border-red-200 text-red-600 bg-white hover:bg-red-50 text-sm font-semibold transition-colors disabled:opacity-50">
+                    Rechazar
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Active labs */}
+      {approved.length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100">
+            <h2 className="text-base font-bold text-slate-900">Centros activos ({approved.length})</h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-100">
+                  {['Centro', 'Tipo', 'Ciudad', 'Exámenes', 'Completados', 'Estado', ''].map((h) => (
+                    <th key={h} className="text-left py-3 px-4 text-xs font-semibold text-slate-400 uppercase tracking-wide">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {approved.map((lab) => (
+                  <tr key={lab.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                    <td className="py-3.5 px-4 font-semibold text-slate-900">{lab.name}</td>
+                    <td className="py-3.5 px-4 text-slate-500 text-xs">{LAB_TYPE_LABELS[lab.type] ?? lab.type}</td>
+                    <td className="py-3.5 px-4 text-slate-500">{lab.city ?? '—'}</td>
+                    <td className="py-3.5 px-4 text-slate-700">{lab.exam_count}</td>
+                    <td className="py-3.5 px-4 text-slate-700">{lab.completed_count}</td>
+                    <td className="py-3.5 px-4">
+                      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${LAB_STATUS_COLORS[lab.status]}`}>
+                        {LAB_STATUS_LABELS[lab.status]}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <button onClick={() => onDetail(lab)}
+                        className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 bg-white hover:bg-slate-50 transition-colors font-medium">
+                        Ver detalle
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>
