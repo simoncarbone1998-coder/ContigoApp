@@ -28,7 +28,7 @@ const ROLE_COLORS: Record<Role, string> = {
   admin:   'bg-red-50 text-red-700 border-red-200',
 }
 
-type Tab = 'appointments' | 'users' | 'ratings' | 'exams'
+type Tab = 'appointments' | 'users' | 'ratings' | 'exams' | 'laboratories'
 
 export default function AdminDashboard() {
   const { profile: adminProfile } = useAuth()
@@ -275,10 +275,11 @@ export default function AdminDashboard() {
     : 0
 
   const tabs: { key: Tab; label: string; count: number }[] = [
-    { key: 'appointments', label: 'Citas',          count: appointments.length },
-    { key: 'users',        label: 'Usuarios',        count: allUsers.length },
-    { key: 'ratings',      label: 'Calificaciones',  count: feedbacks.length },
-    { key: 'exams',        label: 'Exámenes',        count: diagOrders.length },
+    { key: 'appointments', label: 'Citas',           count: appointments.length },
+    { key: 'users',        label: 'Usuarios',         count: allUsers.length },
+    { key: 'ratings',      label: 'Calificaciones',   count: feedbacks.length },
+    { key: 'exams',        label: 'Exámenes',         count: diagOrders.length },
+    { key: 'laboratories', label: 'Laboratorios',     count: allLabs.length },
   ]
 
   // Filtered users for users tab
@@ -619,17 +620,6 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Labs section */}
-        {allLabs.length > 0 && (
-          <LabsSection
-            labs={allLabs}
-            processingId={labProcessingId}
-            onApprove={handleLabApprove}
-            onReject={(lab) => { setLabRejectTarget(lab); setLabRejectReason('') }}
-            onDetail={setLabDetail}
-          />
-        )}
-
         {/* Tabs + table */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
 
@@ -675,6 +665,21 @@ export default function AdminDashboard() {
               <RatingsSection feedbacks={feedbacks} avgRating={avgRating} />
             ) : tab === 'exams' ? (
               <ExamsSection orders={diagOrders} />
+            ) : tab === 'laboratories' ? (
+              allLabs.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+                  <span className="text-4xl mb-3">🔬</span>
+                  <p className="text-sm font-medium">No hay laboratorios registrados aún.</p>
+                </div>
+              ) : (
+                <LabsSection
+                  labs={allLabs}
+                  processingId={labProcessingId}
+                  onApprove={handleLabApprove}
+                  onReject={(lab) => { setLabRejectTarget(lab); setLabRejectReason('') }}
+                  onDetail={setLabDetail}
+                />
+              )
             ) : (
               <AppointmentsTable appointments={appointments} cancelling={cancelling} onCancel={handleCancel} />
             )}
