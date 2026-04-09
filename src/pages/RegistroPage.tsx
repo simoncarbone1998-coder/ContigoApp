@@ -67,6 +67,10 @@ export default function RegistroPage() {
     roleParam === 'doctor' ? 'doctor' : roleParam === 'patient' ? 'patient' : 'select'
   )
 
+  useEffect(() => {
+    if (roleParam === 'laboratory') navigate('/lab/registro', { replace: true })
+  }, [roleParam, navigate])
+
   // Shared fields
   const [fullName,         setFullName]         = useState('')
   const [email,            setEmail]            = useState('')
@@ -110,13 +114,13 @@ export default function RegistroPage() {
 
         <Link to="/" className="mb-8"><Logo /></Link>
 
-        <div className="w-full max-w-2xl">
+        <div className="w-full max-w-3xl">
           <div className="text-center mb-8">
             <h1 className="text-2xl font-bold text-white mb-2">¿Cómo quieres unirte a Contigo?</h1>
             <p className="text-white/70 text-sm">Elige tu rol para comenzar</p>
           </div>
 
-          <div className="grid sm:grid-cols-2 gap-4">
+          <div className="grid sm:grid-cols-3 gap-4">
             {/* Patient card */}
             <button
               onClick={() => setMode('patient')}
@@ -144,6 +148,21 @@ export default function RegistroPage() {
               </p>
               <div className="w-full py-3 bg-emerald-600 group-hover:bg-emerald-700 text-white font-semibold rounded-xl text-sm text-center transition-colors">
                 Registrarme como médico
+              </div>
+            </button>
+
+            {/* Lab card */}
+            <button
+              onClick={() => navigate('/lab/registro')}
+              className="group bg-white rounded-2xl p-8 text-left hover:border-violet-400 border-2 border-transparent transition-all hover:shadow-xl hover:-translate-y-0.5 duration-200"
+            >
+              <div className="text-5xl mb-4">🔬</div>
+              <h2 className="text-lg font-bold text-slate-900 mb-1">Soy laboratorio</h2>
+              <p className="text-slate-500 text-sm mb-6 leading-relaxed">
+                Registra tu centro diagnóstico y gestiona órdenes de exámenes.
+              </p>
+              <div className="w-full py-3 bg-violet-600 group-hover:bg-violet-700 text-white font-semibold rounded-xl text-sm text-center transition-colors">
+                Registrar mi centro
               </div>
             </button>
           </div>
