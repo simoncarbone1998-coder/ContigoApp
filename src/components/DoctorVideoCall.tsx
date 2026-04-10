@@ -17,11 +17,22 @@ interface Props {
 }
 
 type Phase = 'calling' | 'processing' | 'review' | 'done'
-type MedRow  = { medicine_name: string; dose: string; instructions: string }
-type ExamRow = { exam_type: string; notes: string }
+type MedRow      = { medicine_name: string; dose: string; instructions: string }
+type ExamRow     = { exam_type: string; notes: string }
+type ReferralRow = { specialty: string; reason: string; urgency: 'rutinaria' | 'prioritaria' }
 
-const emptyMed  = (): MedRow  => ({ medicine_name: '', dose: '', instructions: '' })
-const emptyExam = (): ExamRow => ({ exam_type: '', notes: '' })
+const emptyMed      = (): MedRow      => ({ medicine_name: '', dose: '', instructions: '' })
+const emptyExam     = (): ExamRow     => ({ exam_type: '', notes: '' })
+const emptyReferral = (): ReferralRow => ({ specialty: '', reason: '', urgency: 'rutinaria' })
+
+const SPECIALIST_SPECIALTIES = [
+  { value: 'pediatria',    label: 'Pediatría' },
+  { value: 'ginecologia',  label: 'Ginecología' },
+  { value: 'cardiologia',  label: 'Cardiología' },
+  { value: 'dermatologia', label: 'Dermatología' },
+  { value: 'psicologia',   label: 'Psicología' },
+  { value: 'ortopedia',    label: 'Ortopedia' },
+]
 
 export default function DoctorVideoCall({
   roomUrl, token, appointmentId, doctorId, patientId, onComplete, onLeave,
@@ -58,6 +69,13 @@ export default function DoctorVideoCall({
   const [aiError,   setAiError]   = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saving,    setSaving]    = useState(false)
+
+  // Referrals
+  const [referrals, setReferrals] = useState<ReferralRow[]>([])
+  // Follow-up
+  const [scheduleFollowUp, setScheduleFollowUp] = useState(false)
+  const [followUpMonths, setFollowUpMonths] = useState<number | null>(null)
+  const [followUpNote, setFollowUpNote] = useState('')
 
   // Auto-scroll transcript
   useEffect(() => {
@@ -180,6 +198,22 @@ export default function DoctorVideoCall({
         const aiExams = data.examenes ?? []
         if (aiExams.length > 0) { setExams(aiExams); setNoExams(false) }
         else { setExams([emptyExam()]); setNoExams(true) }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const aiRefs = data.referencias ?? []
+        if (aiRefs.length > 0) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          setReferrals(aiRefs.map((r: any) => ({
+            specialty: r.specialty ?? '',
+            reason:    r.reason    ?? '',
+            urgency:   r.urgency   ?? 'rutinaria',
+          })))
+        }
+        const aiControl = data.control
+        if (aiControl?.recommended && aiControl?.months) {
+          setScheduleFollowUp(true)
+          setFollowUpMonths(aiControl.months)
+          setFollowUpNote(aiControl.note ?? '')
+        }
       } else {
         setAiError('No se pudo generar el resumen automático. Por favor completa los campos manualmente.')
       }
@@ -243,7 +277,72 @@ export default function DoctorVideoCall({
       }
     }
 
-    // 4. Doctor earnings
+    // 4. Specialist referrals
+    const validReferrals = referrals.filter((r) => r.specialty && r.reason.trim())
+    if (validReferrals.length > 0) {
+      await supabase.from('specialist_referrals').insert(
+        validReferrals.map((r) => ({
+          appointment_id:      appointmentId,
+          patient_id:          patientId,
+          referring_doctor_id: doctorId,
+          specialty:           r.specialty,
+          reason:              r.reason.trim(),
+          urgency:             r.urgency,
+          created_by_role:     'general',
+        }))
+      )
+      // Fetch patient and doctor info to send notification email
+      const { data: patientData } = await supabase
+        .from('profiles')
+        .select('email, full_name')
+        .eq('id', patientId)
+        .single()
+      const { data: doctorData } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', doctorId)
+        .single()
+      if (patientData?.email) {
+        const referralList = validReferrals.map((r) => {
+          const label = SPECIALIST_SPECIALTIES.find((s) => s.value === r.specialty)?.label ?? r.specialty
+          const urgLabel = r.urgency === 'prioritaria' ? 'Prioritaria' : 'Rutinaria'
+          return `<li style="margin:8px 0;"><strong>${label}</strong> — ${urgLabel}<br/><span style="color:#64748b;font-size:13px;">Motivo: ${r.reason}</span></li>`
+        }).join('')
+        try {
+          await supabase.functions.invoke('send-email', {
+            body: {
+              to: patientData.email,
+              subject: '📋 Tienes nuevas referencias médicas — Contigo',
+              html: `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"></head><body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,sans-serif;"><table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;"><tr><td align="center" style="padding:32px 16px;"><table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;"><tr><td style="background:#1e3a5f;border-radius:16px 16px 0 0;padding:28px 32px;"><p style="margin:0;color:#fff;font-size:24px;font-weight:700;">contigo</p><p style="margin:4px 0 0;color:#93c5fd;font-size:13px;">Plataforma de Salud · Colombia</p></td></tr><tr><td style="background:#fff;padding:32px;"><p style="margin:0 0 6px;color:#1e3a5f;font-size:22px;font-weight:700;">📋 Nuevas referencias médicas</p><p style="margin:0 0 24px;color:#64748b;font-size:15px;">Hola ${patientData.full_name ?? 'Paciente'},</p><p style="margin:0 0 12px;color:#334155;font-size:15px;">Tu médico Dr(a). ${doctorData?.full_name ?? 'Doctor'} te ha referido a:</p><ul style="margin:0 0 20px;padding-left:20px;color:#334155;font-size:14px;line-height:1.6;">${referralList}</ul><p style="margin:0 0 8px;color:#334155;font-size:14px;">Ya puedes agendar tu cita con el especialista en:</p><p style="margin:0 0 24px;"><a href="https://contigomedicina.com/paciente/referencias" style="color:#1e3a5f;font-weight:600;font-size:14px;">contigomedicina.com/paciente/referencias</a></p><p style="margin:0;color:#94a3b8;font-size:13px;">El equipo de Contigo</p></td></tr><tr><td style="background:#f8fafc;border-radius:0 0 16px 16px;padding:20px 32px;text-align:center;border-top:1px solid #e2e8f0;"><p style="margin:0;color:#94a3b8;font-size:12px;">© 2026 Contigo · <a href="https://contigomedicina.com" style="color:#94a3b8;text-decoration:none;">contigomedicina.com</a></p></td></tr></table></td></tr></table></body></html>`,
+            },
+          })
+        } catch { /* non-critical */ }
+      }
+    }
+
+    // 5. Follow-up reminder
+    if (scheduleFollowUp && followUpMonths) {
+      const reminderDate = new Date()
+      reminderDate.setMonth(reminderDate.getMonth() + followUpMonths)
+      const reminderDateStr = reminderDate.toISOString().slice(0, 10)
+      const { data: drData } = await supabase
+        .from('profiles')
+        .select('specialty')
+        .eq('id', doctorId)
+        .single()
+      await supabase.from('follow_up_reminders').insert({
+        appointment_id: appointmentId,
+        patient_id:     patientId,
+        doctor_id:      doctorId,
+        specialty:      drData?.specialty ?? 'medicina_general',
+        reminder_date:  reminderDateStr,
+        months_until:   followUpMonths,
+        note:           followUpNote.trim() || null,
+        status:         'pending',
+      })
+    }
+
+    // 6. Doctor earnings
     await supabase.from('doctor_earnings').insert({ doctor_id: doctorId, appointment_id: appointmentId, amount: 10 })
 
     setSaving(false)
@@ -400,6 +499,96 @@ export default function DoctorVideoCall({
                 className="w-4 h-4 rounded border-slate-300 accent-blue-600" />
               <span className="text-sm text-slate-600">No ordenar exámenes en esta cita</span>
             </label>
+          </div>
+
+          {/* Referrals section */}
+          <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">📋 Referir a especialista</p>
+            {referrals.length > 0 && (
+              <div className="space-y-3">
+                {referrals.map((ref, i) => (
+                  <div key={i} className="relative p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                    <button type="button"
+                      onClick={() => setReferrals((r) => r.filter((_, j) => j !== i))}
+                      className="absolute top-2 right-2 w-5 h-5 rounded-full bg-slate-200 hover:bg-red-100 text-slate-500 hover:text-red-600 flex items-center justify-center text-xs font-bold transition-colors"
+                      aria-label="Eliminar">×</button>
+                    <select value={ref.specialty}
+                      onChange={(e) => setReferrals((r) => r.map((x, j) => j === i ? { ...x, specialty: e.target.value } : x))}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 bg-white">
+                      <option value="">— Especialidad —</option>
+                      {SPECIALIST_SPECIALTIES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                    </select>
+                    <input type="text" value={ref.reason}
+                      onChange={(e) => setReferrals((r) => r.map((x, j) => j === i ? { ...x, reason: e.target.value } : x))}
+                      placeholder="Motivo de la referencia"
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 bg-white"
+                    />
+                    <div className="flex items-center gap-4 pt-1">
+                      <p className="text-xs font-semibold text-slate-500">Urgencia:</p>
+                      {(['rutinaria', 'prioritaria'] as const).map((u) => (
+                        <label key={u} className="flex items-center gap-1.5 cursor-pointer select-none">
+                          <input type="radio" name={`urgency-${i}`} value={u} checked={ref.urgency === u}
+                            onChange={() => setReferrals((r) => r.map((x, j) => j === i ? { ...x, urgency: u } : x))}
+                            className="accent-blue-600" />
+                          <span className="text-sm text-slate-700 capitalize">{u === 'rutinaria' ? 'Rutinaria' : 'Prioritaria'}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button type="button"
+              onClick={() => setReferrals((r) => [...r, emptyReferral()])}
+              disabled={referrals.length >= 6}
+              className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 font-semibold transition-colors disabled:opacity-50">
+              <span className="text-lg leading-none">+</span> Agregar referencia
+            </button>
+          </div>
+
+          {/* Follow-up section */}
+          <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">📅 Programar control</p>
+            <label className="flex items-center gap-2.5 cursor-pointer select-none">
+              <input type="checkbox" checked={scheduleFollowUp}
+                onChange={(e) => {
+                  setScheduleFollowUp(e.target.checked)
+                  if (!e.target.checked) { setFollowUpMonths(null); setFollowUpNote('') }
+                }}
+                className="w-4 h-4 rounded border-slate-300 accent-blue-600" />
+              <span className="text-sm text-slate-700">¿Deseas programar un control para este paciente?</span>
+            </label>
+            {scheduleFollowUp && (
+              <div className="space-y-3 pt-1" style={{ animation: 'modal-in 0.15s ease-out' }}>
+                <p className="text-xs font-semibold text-slate-500">Control en:</p>
+                <div className="flex flex-wrap gap-2">
+                  {[1, 2, 3, 6, 12].map((m) => (
+                    <button key={m} type="button"
+                      onClick={() => setFollowUpMonths(followUpMonths === m ? null : m)}
+                      className={`px-3 py-1.5 rounded-xl border text-sm font-semibold transition-colors ${
+                        followUpMonths === m
+                          ? 'border-blue-500 bg-blue-600 text-white'
+                          : 'border-slate-200 bg-white text-slate-700 hover:border-blue-300'
+                      }`}>
+                      {m === 12 ? '1 año' : `${m} mes${m > 1 ? 'es' : ''}`}
+                    </button>
+                  ))}
+                </div>
+                <textarea value={followUpNote} onChange={(e) => setFollowUpNote(e.target.value)}
+                  rows={2} placeholder="Nota para el paciente (opcional): Ej: Regresar para revisar resultado de exámenes"
+                  className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors resize-none" />
+                {followUpMonths && (
+                  <p className="text-xs text-slate-500">
+                    El paciente recibirá recordatorio el{' '}
+                    <strong>{(() => {
+                      const d = new Date()
+                      d.setMonth(d.getMonth() + followUpMonths)
+                      return d.toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })
+                    })()}</strong>
+                  </p>
+                )}
+              </div>
+            )}
           </div>
 
           {saveError && (

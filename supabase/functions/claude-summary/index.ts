@@ -23,7 +23,7 @@ Deno.serve(async (req) => {
 
     // Empty transcript — return empty fields
     if (!transcript?.trim()) {
-      return json({ resumen: '', medicamentos: [], examenes: [] })
+      return json({ resumen: '', medicamentos: [], examenes: [], referencias: [], control: { recommended: false, months: null, note: '' } })
     }
 
     const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY })
@@ -48,11 +48,26 @@ Responde ÚNICAMENTE con este JSON válido (sin texto adicional, sin markdown, s
       "exam_type": "nombre del examen diagnóstico",
       "notes": "instrucciones adicionales para el examen"
     }
-  ]
+  ],
+  "referencias": [
+    {
+      "specialty": "valor de especialidad en snake_case (pediatria|ginecologia|cardiologia|dermatologia|psicologia|ortopedia)",
+      "reason": "motivo de la referencia",
+      "urgency": "rutinaria|prioritaria"
+    }
+  ],
+  "control": {
+    "recommended": false,
+    "months": null,
+    "note": ""
+  }
 }
 
 Si no se mencionaron medicamentos, usa un array vacío: "medicamentos": []
 Si no se mencionaron exámenes diagnósticos, usa un array vacío: "examenes": []
+Si no se mencionaron referencias a especialistas, usa un array vacío: "referencias": []
+Si no se mencionó control de seguimiento, usa: "control": {"recommended": false, "months": null, "note": ""}
+Para "control.months" usa solo los valores: 1, 2, 3, 6, o 12.
 Si la transcripción es insuficiente, genera un resumen genérico breve.`,
       messages: [{ role: 'user', content: transcript }],
     })
@@ -69,6 +84,8 @@ Si la transcripción es insuficiente, genera un resumen genérico breve.`,
       resumen: string
       medicamentos: { medicine_name: string; dose: string; instructions: string }[]
       examenes: { exam_type: string; notes: string }[]
+      referencias: { specialty: string; reason: string; urgency: string }[]
+      control: { recommended: boolean; months: number | null; note: string }
     }
 
     try {
@@ -78,6 +95,8 @@ Si la transcripción es insuficiente, genera un resumen genérico breve.`,
         resumen: '',
         medicamentos: [],
         examenes: [],
+        referencias: [],
+        control: { recommended: false, months: null, note: '' },
         warning: 'No se pudo parsear la respuesta de IA.',
       })
     }
@@ -86,8 +105,10 @@ Si la transcripción es insuficiente, genera un resumen genérico breve.`,
       resumen:      result.resumen      ?? '',
       medicamentos: result.medicamentos ?? [],
       examenes:     result.examenes     ?? [],
+      referencias:  result.referencias  ?? [],
+      control:      result.control      ?? { recommended: false, months: null, note: '' },
     })
   } catch (err) {
-    return json({ error: String(err), resumen: '', medicamentos: [], examenes: [] }, 500)
+    return json({ error: String(err), resumen: '', medicamentos: [], examenes: [], referencias: [], control: { recommended: false, months: null, note: '' } }, 500)
   }
 })

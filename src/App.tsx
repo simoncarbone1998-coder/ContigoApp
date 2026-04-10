@@ -11,6 +11,7 @@ import PatientAgendarPage   from './pages/paciente/AgendarPage'
 import PatientCalendarioPage from './pages/paciente/CalendarioPage'
 import PatientPastillasPage  from './pages/paciente/PastillasPage'
 import PatientExamenesPage   from './pages/paciente/ExamenesPage'
+import PatientReferenciasPage from './pages/paciente/ReferenciasPage'
 
 // Doctor pages
 import DoctorPendingPage  from './pages/doctor/PendingPage'
@@ -55,6 +56,7 @@ export default function App() {
         <Route path="/paciente/calendario"  element={<PatientCalendarioPage />} />
         <Route path="/paciente/pastillas"   element={<PatientPastillasPage />} />
         <Route path="/paciente/examenes"    element={<PatientExamenesPage />} />
+        <Route path="/paciente/referencias" element={<PatientReferenciasPage />} />
         {/* Legacy redirect */}
         <Route path="/paciente/dashboard"   element={<Navigate to="/paciente/perfil" replace />} />
         <Route path="/paciente/nueva-cita"  element={<Navigate to="/paciente/agendar" replace />} />

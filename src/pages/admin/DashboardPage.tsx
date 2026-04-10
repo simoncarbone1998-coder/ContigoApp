@@ -6,6 +6,16 @@ import type { Profile, Appointment } from '../../lib/types'
 import type { Role } from '../../lib/types'
 import { specialtyLabel } from '../../lib/types'
 
+const SPECIALTY_LABELS_ADMIN: Record<string, string> = {
+  medicina_general: 'Med. General',
+  pediatria:        'Pediatría',
+  cardiologia:      'Cardiología',
+  dermatologia:     'Dermatología',
+  ginecologia:      'Ginecología',
+  ortopedia:        'Ortopedia',
+  psicologia:       'Psicología',
+}
+
 function formatDate(d: string) {
   const [y, m, day] = d.split('-')
   return `${day}/${m}/${y}`
@@ -42,6 +52,7 @@ export default function AdminDashboard() {
   const [feedbacks, setFeedbacks] = useState<any[]>([])
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [diagOrders, setDiagOrders] = useState<any[]>([])
+  const [referralStats, setReferralStats] = useState<{ monthCount: number; topSpecialty: string | null }>({ monthCount: 0, topSpecialty: null })
 
   // Pending doctors
   const [pendingDoctors, setPendingDoctors] = useState<Profile[]>([])
@@ -201,6 +212,23 @@ export default function AdminDashboard() {
       setFeedbacks(fR.data ?? [])
       setDiagOrders(doR.data ?? [])
     }
+
+    // Fetch referral stats
+    const startOfMonth = new Date()
+    startOfMonth.setDate(1)
+    startOfMonth.setHours(0, 0, 0, 0)
+    const { data: monthRefs } = await supabase
+      .from('specialist_referrals')
+      .select('specialty')
+      .gte('created_at', startOfMonth.toISOString())
+    if (monthRefs) {
+      const specCount: Record<string, number> = {}
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      monthRefs.forEach((r: any) => { specCount[r.specialty] = (specCount[r.specialty] ?? 0) + 1 })
+      const top = Object.entries(specCount).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
+      setReferralStats({ monthCount: monthRefs.length, topSpecialty: top })
+    }
+
     setLoading(false)
   }, [])
 
@@ -254,6 +282,12 @@ export default function AdminDashboard() {
       label: 'Citas activas',
       value: appointments.filter((a) => a.status === 'confirmed').length,
       bg: 'bg-amber-50', text: 'text-amber-700', icon: '✅',
+    },
+    { label: 'Referencias este mes', value: referralStats.monthCount, bg: 'bg-amber-50', text: 'text-amber-700', icon: '📋' },
+    {
+      label: 'Especialidad más referida',
+      value: referralStats.topSpecialty ? (SPECIALTY_LABELS_ADMIN[referralStats.topSpecialty] ?? referralStats.topSpecialty) : '—',
+      bg: 'bg-pink-50', text: 'text-pink-700', icon: '🏥',
     },
   ]
 
@@ -553,7 +587,7 @@ export default function AdminDashboard() {
         )}
 
         {/* Stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
           {stats.map((s) => (
             <div key={s.label} className={`${s.bg} rounded-2xl border border-slate-200 p-5`}>
               <p className="text-2xl mb-2">{s.icon}</p>

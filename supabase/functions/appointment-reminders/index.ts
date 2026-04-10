@@ -300,8 +300,69 @@ Deno.serve(async () => {
     }
   }
 
+  // ── 3. Process follow-up reminders ─────────────────────────────────────────
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const thirtyDaysFromNow = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000)
+  const thirtyDaysStr = thirtyDaysFromNow.toISOString().slice(0, 10)
+
+  const { data: pendingReminders } = await supabase
+    .from('follow_up_reminders')
+    .select('*, patient:patient_id(full_name, email), doctor:doctor_id(full_name)')
+    .eq('status', 'pending')
+    .lte('reminder_date', thirtyDaysStr)
+
+  const SPECIALTY_LABELS_FN: Record<string, string> = {
+    medicina_general: 'Medicina General',
+    pediatria:        'Pediatría',
+    cardiologia:      'Cardiología',
+    dermatologia:     'Dermatología',
+    ginecologia:      'Ginecología',
+    ortopedia:        'Ortopedia',
+    psicologia:       'Psicología',
+  }
+
+  let remindersProcessed = 0
+  for (const rem of (pendingReminders ?? [])) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r = rem as any
+    const patientEmail = r.patient?.email
+    const patientName  = r.patient?.full_name ?? 'Paciente'
+    const doctorName   = r.doctor?.full_name  ?? 'Doctor'
+    const specLabel    = SPECIALTY_LABELS_FN[r.specialty] ?? r.specialty
+
+    await supabase
+      .from('follow_up_reminders')
+      .update({ status: 'notified' })
+      .eq('id', r.id)
+
+    if (patientEmail) {
+      try {
+        await sendEmail(
+          patientEmail,
+          '📅 Recordatorio de control médico — Contigo',
+          emailWrapper(`
+            <p style="margin:0 0 6px;color:#1e3a5f;font-size:22px;font-weight:700;">📅 Recordatorio de control médico</p>
+            <p style="margin:0 0 24px;color:#64748b;font-size:15px;">Hola ${patientName},</p>
+            <p style="margin:0 0 16px;color:#334155;font-size:15px;line-height:1.6;">
+              Tu médico Dr(a). ${doctorName} recomienda que agendes un control de <strong>${specLabel}</strong>.
+            </p>
+            ${r.note ? `<p style="margin:0 0 16px;padding:12px 16px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;color:#334155;font-size:14px;line-height:1.6;"><em>Nota de tu médico: "${r.note}"</em></p>` : ''}
+            <p style="margin:0 0 8px;color:#334155;font-size:14px;">Ya puedes agendar tu cita en:</p>
+            <p style="margin:0 0 24px;">
+              <a href="https://contigomedicina.com/paciente/referencias" style="color:#1e3a5f;font-weight:600;font-size:14px;">contigomedicina.com/paciente/referencias</a>
+            </p>
+            <p style="margin:0;color:#94a3b8;font-size:13px;">El equipo de Contigo</p>
+          `)
+        )
+      } catch { /* non-critical */ }
+    }
+    remindersProcessed++
+  }
+  console.log(`Processed ${remindersProcessed} follow-up reminders.`)
+
   return new Response(
-    JSON.stringify({ processed: toRemind.length, sent, failed }),
+    JSON.stringify({ processed: toRemind.length, sent, failed, remindersProcessed }),
     { headers: { 'Content-Type': 'application/json' } },
   )
 })

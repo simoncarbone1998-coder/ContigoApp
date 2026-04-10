@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import NavBar from '../../components/NavBar'
 import MiniCalendar from '../../components/MiniCalendar'
 import { SPECIALTIES, specialtyLabel } from '../../lib/types'
 import type { AvailabilitySlot, Specialty } from '../../lib/types'
+import { checkBookingAccess } from '../../utils/bookingAccess'
+import type { BookingAccessResult } from '../../utils/bookingAccess'
 
 // ── Email helpers ───────────────────────────────────────────────────────────
 
@@ -99,7 +102,6 @@ async function sendConfirmationEmails(opts: {
 }) {
   try {
     const jobs: Promise<unknown>[] = []
-
     jobs.push(supabase.functions.invoke('send-email', {
       body: {
         to: opts.patientEmail,
@@ -107,7 +109,6 @@ async function sendConfirmationEmails(opts: {
         html: confirmationPatientHtml(opts),
       },
     }))
-
     if (opts.doctorEmail) {
       jobs.push(supabase.functions.invoke('send-email', {
         body: {
@@ -117,7 +118,6 @@ async function sendConfirmationEmails(opts: {
         },
       }))
     }
-
     await Promise.all(jobs)
   } catch (err) {
     console.error('Confirmation email error (non-blocking):', err)
@@ -132,6 +132,7 @@ function formatTime(t: string) { return t.slice(0, 5) }
 
 export default function PatientAgendarPage() {
   const { profile } = useAuth()
+  const [searchParams] = useSearchParams()
 
   // Step state
   const [selectedSpecialty, setSelectedSpecialty] = useState<Specialty | ''>('')
@@ -160,6 +161,11 @@ export default function PatientAgendarPage() {
   // Active appointments per specialty (to block double-booking)
   const [activeSpecialties, setActiveSpecialties] = useState<Set<string>>(new Set())
 
+  // Access checks for specialist specialties
+  const [accessResults, setAccessResults] = useState<Record<string, BookingAccessResult>>({})
+  const [accessLoading, setAccessLoading] = useState(false)
+  const [lockedModal, setLockedModal] = useState<string | null>(null)
+
   const fetchActiveSpecialties = useCallback(async () => {
     if (!profile) return
     const { data } = await supabase
@@ -170,8 +176,8 @@ export default function PatientAgendarPage() {
       .eq('completed', false)
     const nowMs = Date.now()
     const set = new Set<string>()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ;(data ?? []).forEach((a: any) => {
-      // Skip appointments whose slot has already passed — don't block new bookings
       if (a.slot?.date && a.slot?.start_time) {
         const slotMs = new Date(`${a.slot.date}T${a.slot.start_time}`).getTime()
         if (slotMs < nowMs) return
@@ -180,6 +186,20 @@ export default function PatientAgendarPage() {
       if (spec) set.add(spec)
     })
     setActiveSpecialties(set)
+  }, [profile])
+
+  const loadAccessResults = useCallback(async () => {
+    if (!profile) return
+    setAccessLoading(true)
+    const SPECIALIST_SPECIALTIES = ['pediatria', 'cardiologia', 'dermatologia', 'ginecologia', 'ortopedia', 'psicologia']
+    const results = await Promise.all(
+      SPECIALIST_SPECIALTIES.map(async (spec) => {
+        const result = await checkBookingAccess(profile.id, spec)
+        return [spec, result] as [string, BookingAccessResult]
+      })
+    )
+    setAccessResults(Object.fromEntries(results))
+    setAccessLoading(false)
   }, [profile])
 
   const fetchSlots = useCallback(async (specialty: Specialty) => {
@@ -199,7 +219,6 @@ export default function PatientAgendarPage() {
       setSlots([])
     } else {
       const now = Date.now()
-      // Filter by matching specialty, only keep slots at :00 or :30 starts, and exclude past slots
       const filtered = ((data ?? []) as AvailabilitySlot[]).filter(
         (s) =>
           (s.specialty === specialty || s.doctor?.specialty === specialty) &&
@@ -212,6 +231,18 @@ export default function PatientAgendarPage() {
   }, [])
 
   useEffect(() => { fetchActiveSpecialties() }, [fetchActiveSpecialties])
+  useEffect(() => { loadAccessResults() }, [loadAccessResults])
+
+  // Pre-select specialty from URL param (e.g. ?specialty=cardiologia)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const paramSpec = searchParams.get('specialty')
+    if (paramSpec && profile) {
+      handleSpecialtyChange(paramSpec as Specialty)
+    }
+  // Only run on mount / when profile becomes available
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile])
 
   async function handleSpecialtyChange(spec: Specialty | '') {
     setSelectedSpecialty(spec)
@@ -340,26 +371,124 @@ export default function PatientAgendarPage() {
             <StepBadge n={1} active={true} />
             <h2 className="text-sm font-bold text-slate-900">Selecciona la especialidad</h2>
           </div>
-          <select
-            value={selectedSpecialty}
-            onChange={(e) => handleSpecialtyChange(e.target.value as Specialty | '')}
-            className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors bg-white"
-          >
-            <option value="">— Elige una especialidad —</option>
-            {SPECIALTIES.map((s) => (
-              <option key={s.value} value={s.value}>{s.label}</option>
-            ))}
-          </select>
 
-          {isBlocked && (
-            <div className="mt-3 flex gap-2.5 p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800">
-              <svg className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-              </svg>
-              Ya tienes una cita activa en {specialtyLabel(selectedSpecialty as Specialty)}. Cancela la cita actual antes de agendar una nueva.
+          {accessLoading ? (
+            <div className="flex justify-center py-6">
+              <div className="w-6 h-6 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin" />
             </div>
+          ) : (
+            <>
+              {/* Warning: patient lacks a general consultation */}
+              {Object.values(accessResults).some((r) => r.reason === 'general_required') && (
+                <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800">
+                  <p className="font-semibold mb-1">Para acceder a especialistas primero agenda con Medicina General</p>
+                  <p className="text-amber-700 text-xs">Tu médico general evaluará tu caso y te referirá al especialista adecuado.</p>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {SPECIALTIES.map((spec) => {
+                  const access = spec.value === 'medicina_general'
+                    ? { canBook: true }
+                    : (accessResults[spec.value] ?? { canBook: false, reason: 'referral_required' as const })
+                  const cardIsBlocked = selectedSpecialty === spec.value && activeSpecialties.has(spec.value)
+
+                  // Badge for active referral or follow-up reminder
+                  let badge: React.ReactNode = null
+                  if (spec.value !== 'medicina_general' && access.canBook && (access as BookingAccessResult).referral) {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const ref = (access as BookingAccessResult).referral as any
+                    if (ref.urgency) {
+                      badge = <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">Referencia activa</span>
+                    } else if (ref.reminder_date) {
+                      badge = <span className="text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">Control recomendado</span>
+                    }
+                  }
+
+                  if (!access.canBook) {
+                    return (
+                      <button
+                        key={spec.value}
+                        onClick={() => setLockedModal(spec.label)}
+                        className="relative p-4 rounded-xl border-2 border-slate-200 bg-slate-50 text-left transition-colors hover:border-slate-300 cursor-pointer"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-sm font-semibold text-slate-400">{spec.label}</p>
+                          <span className="shrink-0 text-slate-400">🔒</span>
+                        </div>
+                        <p className="text-xs text-slate-400 mt-1">
+                          {(access as BookingAccessResult).reason === 'general_required'
+                            ? 'Requiere consulta general primero'
+                            : 'Requiere referencia médica'}
+                        </p>
+                      </button>
+                    )
+                  }
+
+                  return (
+                    <button
+                      key={spec.value}
+                      onClick={() => handleSpecialtyChange(spec.value as Specialty)}
+                      className={`relative p-4 rounded-xl border-2 text-left transition-all ${
+                        selectedSpecialty === spec.value
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50/50'
+                      }`}
+                    >
+                      <p className="text-sm font-semibold text-slate-900">{spec.label}</p>
+                      {badge && <div className="mt-2">{badge}</div>}
+                      {cardIsBlocked && (
+                        <p className="text-xs text-amber-600 mt-1">Ya tienes cita activa</p>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            </>
           )}
         </div>
+
+        {/* Locked specialty modal */}
+        {lockedModal && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4"
+            onClick={() => setLockedModal(null)}>
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4"
+              onClick={(e) => e.stopPropagation()}>
+              <div className="text-center">
+                <span className="text-4xl">🔒</span>
+                <h2 className="text-base font-bold text-slate-900 mt-3">Acceso restringido</h2>
+                <p className="text-sm text-slate-500 mt-2 leading-relaxed">
+                  Para agendar con <strong>{lockedModal}</strong> necesitas una referencia de tu médico. En tu próxima consulta de Medicina General, pídele que te refiera.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <button
+                  onClick={() => {
+                    setLockedModal(null)
+                    handleSpecialtyChange('medicina_general' as Specialty)
+                  }}
+                  className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors"
+                >
+                  Agendar Medicina General
+                </button>
+                <button onClick={() => setLockedModal(null)}
+                  className="w-full py-3 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Double-booking warning */}
+        {isBlocked && (selectedSpecialty as string) !== '' && (
+          <div className="flex gap-2.5 p-4 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800">
+            <svg className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+            </svg>
+            Ya tienes una cita activa en {specialtyLabel(selectedSpecialty as Specialty)}. Cancela la cita actual antes de agendar una nueva.
+          </div>
+        )}
 
         {/* Step 2 — Calendar (visible after specialty selected) */}
         {selectedSpecialty !== '' && !isBlocked && (
@@ -486,7 +615,7 @@ export default function PatientAgendarPage() {
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
                     </svg>
-                    📎 Subir archivos
+                    Subir archivos
                   </button>
                   <input
                     ref={preFileRef}
