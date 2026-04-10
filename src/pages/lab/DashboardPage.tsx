@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
-import { getLabSession } from '../../lib/labAuth'
+import { useLabContext } from '../../contexts/LabContext'
 import LabNavBar from '../../components/LabNavBar'
 
 type Stats = { pending_orders: number; today_appts: number; month_completed: number; total_completed: number }
@@ -10,7 +10,7 @@ type TodayAppt = any
 function formatTime(t: string) { return t?.slice(0, 5) ?? '—' }
 
 export default function LabDashboardPage() {
-  const session = getLabSession()!
+  const { lab } = useLabContext()
   const [stats,      setStats]      = useState<Stats | null>(null)
   const [todayAppts, setTodayAppts] = useState<TodayAppt[]>([])
   const [loading,    setLoading]    = useState(true)
@@ -27,25 +27,26 @@ export default function LabDashboardPage() {
   }
 
   const fetchData = useCallback(async () => {
+    if (!lab) return
     setLoading(true)
     const [{ data: statsData }, { data: apptData }] = await Promise.all([
-      supabase.rpc('get_lab_dashboard_stats', { p_lab_id: session.id }),
-      supabase.rpc('get_lab_today_appointments', { p_lab_id: session.id }),
+      supabase.rpc('get_lab_dashboard_stats', { p_lab_id: lab.id }),
+      supabase.rpc('get_lab_today_appointments', { p_lab_id: lab.id }),
     ])
     setStats(statsData as Stats)
     setTodayAppts((apptData as TodayAppt[]) ?? [])
     setLoading(false)
-  }, [session.id])
+  }, [lab])
 
   useEffect(() => { fetchData() }, [fetchData])
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
-    if (!file || !uploadId) return
+    if (!file || !uploadId || !lab) return
     if (file.size > 20 * 1024 * 1024) { showToast('El archivo no puede superar 20 MB.'); return }
     setUploading(true)
     const ext  = file.name.split('.').pop()
-    const path = `${session.id}/${uploadId}.${ext}`
+    const path = `${lab.id}/${uploadId}.${ext}`
     const { error: upErr } = await supabase.storage.from('lab-results').upload(path, file, { upsert: true })
     if (upErr) { showToast('Error al subir el archivo.'); setUploading(false); return }
     const { data: { publicUrl } } = supabase.storage.from('lab-results').getPublicUrl(path)
@@ -53,10 +54,9 @@ export default function LabDashboardPage() {
     const appt = todayAppts.find((a: TodayAppt) => a.id === uploadId)
     await supabase.rpc('upload_lab_result', {
       p_appointment_id: uploadId,
-      p_lab_id:         session.id,
+      p_lab_id:         lab.id,
       p_result_url:     publicUrl,
     })
-    // Notify emails (fire-and-forget)
     if (appt?.patient_name) {
       supabase.functions.invoke('send-email', {
         body: {
@@ -83,10 +83,10 @@ export default function LabDashboardPage() {
   }
 
   const statCards = stats ? [
-    { label: 'Órdenes pendientes',  value: stats.pending_orders,  bg: 'bg-orange-50',  text: 'text-orange-700',  icon: '📋' },
-    { label: 'Citas hoy',           value: stats.today_appts,     bg: 'bg-blue-50',    text: 'text-blue-700',    icon: '📅' },
+    { label: 'Órdenes pendientes',   value: stats.pending_orders,  bg: 'bg-orange-50',  text: 'text-orange-700',  icon: '📋' },
+    { label: 'Citas hoy',            value: stats.today_appts,     bg: 'bg-blue-50',    text: 'text-blue-700',    icon: '📅' },
     { label: 'Completados este mes', value: stats.month_completed, bg: 'bg-emerald-50', text: 'text-emerald-700', icon: '✅' },
-    { label: 'Total realizados',    value: stats.total_completed, bg: 'bg-violet-50',  text: 'text-violet-700',  icon: '🔬' },
+    { label: 'Total realizados',     value: stats.total_completed, bg: 'bg-violet-50',  text: 'text-violet-700',  icon: '🔬' },
   ] : []
 
   return (
@@ -102,7 +102,7 @@ export default function LabDashboardPage() {
       <main className="max-w-5xl mx-auto px-4 py-8 space-y-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
-          <p className="text-slate-500 text-sm mt-1">{session.name} · {session.city}</p>
+          <p className="text-slate-500 text-sm mt-1">{lab?.name} · {lab?.city}</p>
         </div>
 
         {loading ? (
@@ -111,7 +111,6 @@ export default function LabDashboardPage() {
           </div>
         ) : (
           <>
-            {/* Stats */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {statCards.map((s) => (
                 <div key={s.label} className={`${s.bg} rounded-2xl border border-slate-200 p-5`}>
@@ -122,7 +121,6 @@ export default function LabDashboardPage() {
               ))}
             </div>
 
-            {/* Today's appointments */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
               <h2 className="text-base font-bold text-slate-900 mb-5">
                 📅 Citas de hoy

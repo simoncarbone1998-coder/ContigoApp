@@ -1,12 +1,13 @@
 import { useNavigate } from 'react-router-dom'
-import { getLabSession, logoutLab } from '../../lib/labAuth'
+import { supabase } from '../../lib/supabase'
+import { useLabContext } from '../../contexts/LabContext'
 
 export default function LabPendingPage() {
-  const navigate = useNavigate()
-  const session  = getLabSession()
+  const navigate  = useNavigate()
+  const { lab }   = useLabContext()
 
-  function handleLogout() {
-    logoutLab()
+  async function handleLogout() {
+    await supabase.auth.signOut()
     navigate('/lab/login', { replace: true })
   }
 
@@ -25,15 +26,15 @@ export default function LabPendingPage() {
           </p>
         </div>
 
-        {session && (
+        {lab && (
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
             <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-4">Información enviada</p>
             <div className="space-y-3 text-sm">
               {[
-                { label: 'Centro',  value: session.name },
-                { label: 'Tipo',    value: session.type === 'laboratorio' ? 'Laboratorio clínico' : session.type === 'imagenes' ? 'Imágenes diagnósticas' : 'Laboratorio e imágenes' },
-                { label: 'Ciudad',  value: session.city },
-                { label: 'Correo',  value: session.email },
+                { label: 'Centro',  value: lab.name },
+                { label: 'Tipo',    value: lab.type === 'laboratorio' ? 'Laboratorio clínico' : lab.type === 'imagenes' ? 'Imágenes diagnósticas' : 'Laboratorio e imágenes' },
+                { label: 'Ciudad',  value: lab.city },
+                { label: 'Correo',  value: lab.email },
               ].map(({ label, value }) => value && (
                 <div key={label} className="flex justify-between gap-4">
                   <span className="text-slate-500">{label}</span>

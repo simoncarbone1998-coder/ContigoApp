@@ -4,9 +4,10 @@ import LoadingSpinner from './LoadingSpinner'
 import type { Role } from '../lib/types'
 
 const roleHome: Record<Role, string> = {
-  patient: '/paciente/perfil',
-  doctor:  '/doctor/agenda',
-  admin:   '/admin/dashboard',
+  patient:    '/paciente/perfil',
+  doctor:     '/doctor/agenda',
+  admin:      '/admin/dashboard',
+  laboratory: '/lab/dashboard',
 }
 
 const onboardingPath: Record<string, string> = {

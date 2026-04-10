@@ -31,11 +31,12 @@ function initials(name: string | null, email: string | null) {
   return (email?.[0] ?? '?').toUpperCase()
 }
 
-const ROLE_LABELS: Record<Role, string> = { patient: 'Paciente', doctor: 'Médico', admin: 'Admin' }
+const ROLE_LABELS: Record<Role, string> = { patient: 'Paciente', doctor: 'Médico', admin: 'Admin', laboratory: 'Laboratorio' }
 const ROLE_COLORS: Record<Role, string> = {
-  patient: 'bg-blue-50 text-blue-700 border-blue-200',
-  doctor:  'bg-emerald-50 text-emerald-700 border-emerald-200',
-  admin:   'bg-red-50 text-red-700 border-red-200',
+  patient:    'bg-blue-50 text-blue-700 border-blue-200',
+  doctor:     'bg-emerald-50 text-emerald-700 border-emerald-200',
+  admin:      'bg-red-50 text-red-700 border-red-200',
+  laboratory: 'bg-violet-50 text-violet-700 border-violet-200',
 }
 
 type Tab = 'appointments' | 'users' | 'ratings' | 'exams' | 'laboratories'

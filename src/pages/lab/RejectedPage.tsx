@@ -1,22 +1,13 @@
-import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { getLabSession, logoutLab } from '../../lib/labAuth'
+import { useLabContext } from '../../contexts/LabContext'
 
 export default function LabRejectedPage() {
   const navigate = useNavigate()
-  const session  = getLabSession()
-  const [reason, setReason] = useState<string | null>(null)
+  const { lab }  = useLabContext()
 
-  useEffect(() => {
-    if (!session) return
-    supabase.rpc('get_lab_by_id', { p_id: session.id }).then(({ data }) => {
-      if (data?.rejection_reason) setReason(data.rejection_reason)
-    })
-  }, [session])
-
-  function handleLogout() {
-    logoutLab()
+  async function handleLogout() {
+    await supabase.auth.signOut()
     navigate('/lab/login', { replace: true })
   }
 
@@ -31,10 +22,10 @@ export default function LabRejectedPage() {
           <p className="text-slate-500 text-sm leading-relaxed">
             Lamentablemente no pudimos aprobar tu centro en este momento.
           </p>
-          {reason && (
+          {lab?.rejection_reason && (
             <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700 text-left">
               <p className="font-semibold mb-1">Motivo:</p>
-              <p>{reason}</p>
+              <p>{lab.rejection_reason}</p>
             </div>
           )}
         </div>

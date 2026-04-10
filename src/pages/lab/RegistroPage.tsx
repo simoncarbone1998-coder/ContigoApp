@@ -1,7 +1,6 @@
 import { useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { setLabSession } from '../../lib/labAuth'
 
 const BG = { background: 'linear-gradient(135deg, #1e3a5f 0%, #16a34a 100%)' }
 
@@ -114,35 +113,53 @@ export default function LabRegistroPage() {
 
     setSubmitting(true)
 
-    // Register lab without docs first to get the ID
-    const { data: labData, error: regErr } = await supabase.rpc('register_lab', {
-      p_name: name.trim(), p_email: email.trim(), p_password: password,
-      p_phone: phone.trim(), p_address: address.trim(), p_city: city.trim(), p_type: type,
+    // 1. Create Supabase Auth user
+    const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
+      email: email.trim(),
+      password,
     })
-    if (regErr || !labData) {
-      const msg = regErr?.message ?? ''
-      setError(msg.includes('email_exists') ? 'Este correo ya está registrado.' : 'Error al crear la cuenta. Intenta de nuevo.')
+    if (signUpErr || !signUpData.user) {
+      const msg = signUpErr?.message ?? ''
+      setError(
+        msg.toLowerCase().includes('already registered') || msg.toLowerCase().includes('email')
+          ? 'Este correo ya está registrado.'
+          : 'Error al crear la cuenta. Intenta de nuevo.'
+      )
       setSubmitting(false); return
     }
 
-    const lab = labData as { id: string; name: string; email: string; status: string; type: string; city: string; phone: string; address: string }
+    // 2. Create lab profile (also sets profile.role = 'laboratory')
+    const { data: labId, error: profileErr } = await supabase.rpc('create_lab_profile', {
+      p_name:    name.trim(),
+      p_phone:   phone.trim(),
+      p_address: address.trim(),
+      p_city:    city.trim(),
+      p_type:    type,
+    })
+    if (profileErr || !labId) {
+      setError('Error al crear el perfil del centro. Intenta de nuevo.')
+      await supabase.auth.signOut()
+      setSubmitting(false); return
+    }
 
-    // Upload documents
+    const labIdStr = labId as string
+
+    // 3. Upload documents
     try {
       setCamaraState('uploading')
-      const camaraUrl = await uploadDoc(camaraFile, lab.id, 'camara_comercio')
+      const camaraUrl = await uploadDoc(camaraFile, labIdStr, 'camara_comercio')
       setCamaraState('done')
 
       setHabilitacionState('uploading')
-      const habilitacionUrl = await uploadDoc(habilitacionFile, lab.id, 'habilitacion_supersalud')
+      const habilitacionUrl = await uploadDoc(habilitacionFile, labIdStr, 'habilitacion_supersalud')
       setHabilitacionState('done')
 
       setRutState('uploading')
-      const rutUrl = await uploadDoc(rutFile, lab.id, 'rut')
+      const rutUrl = await uploadDoc(rutFile, labIdStr, 'rut')
       setRutState('done')
 
       await supabase.rpc('update_lab_docs', {
-        p_id: lab.id,
+        p_id: labIdStr,
         p_camara_comercio_url: camaraUrl,
         p_habilitacion_supersalud_url: habilitacionUrl,
         p_rut_url: rutUrl,
@@ -152,17 +169,17 @@ export default function LabRegistroPage() {
       setSubmitting(false); return
     }
 
-    // Insert selected exam types
+    // 4. Insert selected exam types
     const selectedExams = exams.filter((e) => e.selected).map((e) => ({
       exam_name: e.exam_name, category: e.category,
       price_cop: e.price_cop ? parseFloat(e.price_cop) : null,
     }))
     await supabase.rpc('insert_lab_exam_types', {
-      p_laboratory_id: lab.id,
+      p_laboratory_id: labIdStr,
       p_exams: JSON.stringify(selectedExams),
     })
 
-    // Notify admin
+    // 5. Notify admin
     try {
       await supabase.functions.invoke('send-email', {
         body: {
@@ -183,11 +200,8 @@ export default function LabRegistroPage() {
       })
     } catch { /* non-critical */ }
 
-    setLabSession({
-      id: lab.id, name: lab.name, email: lab.email,
-      status: 'pending', type: lab.type as 'laboratorio' | 'imagenes' | 'ambos',
-      city: lab.city, phone: lab.phone, address: lab.address,
-    })
+    // 6. Sign out — lab must wait for approval before accessing portal
+    await supabase.auth.signOut()
 
     setSubmitting(false)
     setStep(4)
@@ -207,11 +221,11 @@ export default function LabRegistroPage() {
             cuando tu centro sea aprobado. Este proceso puede tomar 1–3 días hábiles.
           </p>
           <button
-            onClick={() => { navigate('/lab/pending') }}
+            onClick={() => { navigate('/login?type=lab') }}
             className="w-full py-3 rounded-xl text-white font-semibold text-sm mt-2 transition-all hover:opacity-90"
             style={{ background: 'linear-gradient(135deg, #1e3a5f 0%, #16a34a 100%)' }}
           >
-            Ver estado de mi solicitud
+            Iniciar sesión para ver estado
           </button>
         </div>
       </div>

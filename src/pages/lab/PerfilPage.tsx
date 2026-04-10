@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
-import { getLabSession, refreshLabSession } from '../../lib/labAuth'
+import { useLabContext } from '../../contexts/LabContext'
 import LabNavBar from '../../components/LabNavBar'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -13,7 +13,7 @@ const TYPE_LABELS: Record<string, string> = {
 }
 
 export default function LabPerfilPage() {
-  const session = getLabSession()!
+  const { lab: session, refreshLab } = useLabContext()
   const [lab,      setLab]      = useState<LabData | null>(null)
   const [exams,    setExams]    = useState<{ exam_name: string; category: string }[]>([])
   const [loading,  setLoading]  = useState(true)
@@ -26,6 +26,7 @@ export default function LabPerfilPage() {
   const [city,    setCity]    = useState('')
 
   const fetchData = useCallback(async () => {
+    if (!session) return
     setLoading(true)
     const [{ data: labData }, { data: examData }] = await Promise.all([
       supabase.rpc('get_lab_by_id',       { p_id: session.id }),
@@ -40,7 +41,7 @@ export default function LabPerfilPage() {
     }
     setExams((examData ?? []) as { exam_name: string; category: string }[])
     setLoading(false)
-  }, [session.id])
+  }, [session])
 
   useEffect(() => { fetchData() }, [fetchData])
 
@@ -48,10 +49,10 @@ export default function LabPerfilPage() {
     e.preventDefault()
     setSaving(true)
     await supabase.rpc('update_lab_profile', {
-      p_id: session.id, p_name: name.trim(),
+      p_id: session!.id, p_name: name.trim(),
       p_phone: phone.trim(), p_address: address.trim(), p_city: city.trim(),
     })
-    await refreshLabSession(session.id)
+    await refreshLab()
     setToast('✅ Perfil actualizado')
     setTimeout(() => setToast(null), 3000)
     setSaving(false)

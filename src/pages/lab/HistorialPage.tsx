@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
-import { getLabSession } from '../../lib/labAuth'
+import { useLabContext } from '../../contexts/LabContext'
 import LabNavBar from '../../components/LabNavBar'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -18,18 +18,19 @@ function formatDateTime(ts: string) {
 }
 
 export default function LabHistorialPage() {
-  const session = getLabSession()!
+  const { lab: session } = useLabContext()
   const [history,    setHistory]    = useState<HistoryItem[]>([])
   const [loading,    setLoading]    = useState(true)
   const [search,     setSearch]     = useState('')
   const [filterExam, setFilterExam] = useState('')
 
   const fetchHistory = useCallback(async () => {
+    if (!session) return
     setLoading(true)
     const { data } = await supabase.rpc('get_lab_history', { p_lab_id: session.id })
     setHistory((data as HistoryItem[]) ?? [])
     setLoading(false)
-  }, [session.id])
+  }, [session])
 
   useEffect(() => { fetchHistory() }, [fetchHistory])
 

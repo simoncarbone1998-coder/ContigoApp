@@ -17,7 +17,8 @@ const roleLinks: Record<Role, { to: string; label: string }[]> = {
     { to: '/doctor/agenda',    label: 'Mi Agenda' },
     { to: '/doctor/finanzas',  label: 'Finanzas' },
   ],
-  admin: [{ to: '/admin/dashboard', label: 'Panel de Admin' }],
+  admin:      [{ to: '/admin/dashboard', label: 'Panel de Admin' }],
+  laboratory: [{ to: '/lab/dashboard',   label: 'Portal Aliado' }],
 }
 
 function getInitials(name: string | null, email: string | null): string {

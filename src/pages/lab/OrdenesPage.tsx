@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
-import { getLabSession } from '../../lib/labAuth'
+import { useLabContext } from '../../contexts/LabContext'
 import LabNavBar from '../../components/LabNavBar'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -15,7 +15,7 @@ function formatDate(d: string) {
 }
 
 export default function LabOrdenesPage() {
-  const session = getLabSession()!
+  const { lab: session } = useLabContext()
   const [orders,   setOrders]   = useState<Order[]>([])
   const [loading,  setLoading]  = useState(true)
   const [slots,    setSlots]    = useState<Slot[]>([])
@@ -29,16 +29,18 @@ export default function LabOrdenesPage() {
   const [toast,       setToast]       = useState<string | null>(null)
 
   const fetchOrders = useCallback(async () => {
+    if (!session) return
     setLoading(true)
     const { data } = await supabase.rpc('get_lab_orders', { p_lab_id: session.id })
     setOrders((data as Order[]) ?? [])
     setLoading(false)
-  }, [session.id])
+  }, [session])
 
   const fetchSlots = useCallback(async () => {
+    if (!session) return
     const { data } = await supabase.rpc('get_lab_slots', { p_lab_id: session.id })
     setSlots((data as Slot[]) ?? [])
-  }, [session.id])
+  }, [session])
 
   useEffect(() => { fetchOrders() }, [fetchOrders])
 
@@ -58,7 +60,7 @@ export default function LabOrdenesPage() {
     const slot = slots.find((s: Slot) => s.id === selectedSlot)
     const { error: err } = await supabase.rpc('schedule_lab_appointment', {
       p_diagnostic_order_id: schedOrder.id,
-      p_laboratory_id:       session.id,
+      p_laboratory_id:       session!.id,
       p_lab_slot_id:         selectedSlot,
       p_patient_id:          schedOrder.patient_id,
       p_exam_name:           schedOrder.exam_type,
@@ -77,11 +79,11 @@ export default function LabOrdenesPage() {
             <p>Tu examen ha sido agendado exitosamente.</p>
             <br/>
             <p>🔬 <strong>Examen:</strong> ${schedOrder.exam_type}</p>
-            <p>🏥 <strong>Centro:</strong> ${session.name}</p>
-            <p>📍 <strong>Dirección:</strong> ${session.address ?? '—'}</p>
+            <p>🏥 <strong>Centro:</strong> ${session!.name}</p>
+            <p>📍 <strong>Dirección:</strong> ${session!.address ?? '—'}</p>
             <p>📅 <strong>Fecha:</strong> ${slot ? formatDate(slot.date) : '—'}</p>
             <p>⏰ <strong>Hora:</strong> ${slot ? slot.start_time?.slice(0, 5) : '—'}</p>
-            <p>📞 <strong>Teléfono del centro:</strong> ${session.phone ?? '—'}</p>
+            <p>📞 <strong>Teléfono del centro:</strong> ${session!.phone ?? '—'}</p>
             <br/>
             <p>Recuerda llegar 10 minutos antes de tu cita.</p>
             <p>El equipo de Contigo</p>

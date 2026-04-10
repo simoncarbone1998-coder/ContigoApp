@@ -1,4 +1,4 @@
-export type Role = 'patient' | 'doctor' | 'admin'
+export type Role = 'patient' | 'doctor' | 'admin' | 'laboratory'
 
 export type Specialty =
   | 'medicina_general'

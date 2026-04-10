@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { NavLink, Link, useNavigate } from 'react-router-dom'
-import { getLabSession, logoutLab } from '../lib/labAuth'
+import { supabase } from '../lib/supabase'
+import { useLabContext } from '../contexts/LabContext'
 
 const NAV_LINKS = [
   { to: '/lab/dashboard', label: 'Dashboard' },
@@ -10,12 +11,12 @@ const NAV_LINKS = [
 ]
 
 export default function LabNavBar() {
-  const session  = getLabSession()
+  const { lab }  = useLabContext()
   const navigate = useNavigate()
   const [mobileOpen, setMobileOpen] = useState(false)
 
-  function handleLogout() {
-    logoutLab()
+  async function handleLogout() {
+    await supabase.auth.signOut()
     navigate('/lab/login', { replace: true })
   }
 
@@ -55,10 +56,10 @@ export default function LabNavBar() {
 
         {/* Right */}
         <div className="flex items-center gap-3 shrink-0">
-          {session && (
+          {lab && (
             <div className="hidden sm:flex flex-col items-end">
-              <span className="text-xs font-semibold text-slate-800 truncate max-w-36">{session.name}</span>
-              <span className="text-[10px] text-slate-400 capitalize">{session.type}</span>
+              <span className="text-xs font-semibold text-slate-800 truncate max-w-36">{lab.name}</span>
+              <span className="text-[10px] text-slate-400 capitalize">{lab.type}</span>
             </div>
           )}
           <NavLink

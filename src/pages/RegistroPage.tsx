@@ -6,9 +6,10 @@ import { SPECIALTIES } from '../lib/types'
 import type { Role } from '../lib/types'
 
 const roleHome: Record<Role, string> = {
-  patient: '/paciente/perfil',
-  doctor:  '/doctor/pending',
-  admin:   '/admin/dashboard',
+  patient:    '/paciente/perfil',
+  doctor:     '/doctor/pending',
+  admin:      '/admin/dashboard',
+  laboratory: '/lab/dashboard',
 }
 
 const BG     = { background: 'linear-gradient(135deg, #1e3a5f 0%, #16a34a 100%)' }
