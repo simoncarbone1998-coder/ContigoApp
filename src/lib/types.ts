@@ -45,7 +45,69 @@ export interface Profile {
   approved_at: string | null
   rejected_at: string | null
   rejection_reason: string | null
+  application_status: 'pending' | 'approved' | 'rejected' | null
+  applied_at: string | null
   created_at: string
+}
+
+export interface HealthQuestionnaire {
+  id: string
+  patient_id: string
+  date_of_birth: string | null
+  biological_sex: 'masculino' | 'femenino' | 'otro' | null
+  conditions: string[]
+  hospitalized_last_12m: boolean
+  hospitalization_reason: string | null
+  active_treatment: boolean
+  regular_medications: boolean
+  medications_detail: string | null
+  smoking_status: 'no_fumo' | 'exfumador' | 'ocasional' | 'regular' | null
+  has_eps: boolean
+  created_at: string
+}
+
+export interface UnderwritingRulebook {
+  id: string
+  version: number
+  name: string
+  is_active: boolean
+  cost_per_consultation_usd: number
+  cost_per_medication_usd: number
+  cost_per_exam_usd: number
+  monthly_income_usd: number
+  threshold_review: number
+  threshold_reject: number
+  ai_instructions: string
+  created_by: string | null
+  created_at: string
+  notes: string | null
+}
+
+export interface PatientApplication {
+  id: string
+  patient_id: string
+  status: 'pending' | 'approved' | 'rejected'
+  submitted_at: string
+  reviewed_at: string | null
+  reviewed_by: string | null
+  admin_note: string | null
+  reapply_after: string | null
+  ai_recommendation: 'approve' | 'review' | 'reject' | null
+  ai_score: number | null
+  ai_cost_expected_usd: number | null
+  ai_income_usd: number | null
+  ai_ratio: number | null
+  ai_drivers: { factor: string; impact_usd: number; explanation: string }[] | null
+  ai_reasoning: string | null
+  ai_sensitivity: {
+    breakeven_consultations_per_quarter: number
+    breakeven_ratio_explanation: string
+    scenarios: { name: string; cost_usd: number; ratio: number; viable: boolean }[]
+  } | null
+  rulebook_version_id: string | null
+  created_at: string
+  patient?: Pick<Profile, 'id' | 'full_name' | 'email' | 'city' | 'phone'>
+  rulebook?: Pick<UnderwritingRulebook, 'version' | 'name'>
 }
 
 export interface AvailabilitySlot {

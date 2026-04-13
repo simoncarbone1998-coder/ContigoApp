@@ -28,6 +28,20 @@ export default function RequireRole({ role }: { role: Role }) {
     return <Navigate to={roleHome[profile.role]} replace />
   }
 
+  // Patient application gate
+  // null = legacy / pre-underwriting patient → treat as approved
+  if (role === 'patient') {
+    const appStatus = profile.application_status
+    if (appStatus === 'pending') {
+      if (pathname !== '/paciente/pending-application') return <Navigate to="/paciente/pending-application" replace />
+      return <Outlet />
+    }
+    if (appStatus === 'rejected') {
+      if (pathname !== '/paciente/rejected') return <Navigate to="/paciente/rejected" replace />
+      return <Outlet />
+    }
+  }
+
   // Doctor approval gate
   // null = legacy / pre-approval-system doctor → treat as approved
   if (role === 'doctor') {

@@ -361,8 +361,47 @@ Deno.serve(async () => {
   }
   console.log(`Processed ${remindersProcessed} follow-up reminders.`)
 
+  // ── 4. Alert admin for applications pending > 44 hours ─────────────────────
+  const cutoff44h = new Date(nowMs - 44 * 60 * 60 * 1000).toISOString()
+
+  const { data: stalePending } = await supabase
+    .from('patient_applications')
+    .select('id')
+    .eq('status', 'pending')
+    .lt('submitted_at', cutoff44h)
+
+  const staleCount = (stalePending ?? []).length
+  if (staleCount > 0) {
+    try {
+      await sendEmail(
+        'simoncarbone1998@gmail.com',
+        `⚠️ Aplicaciones pendientes de revisión — Contigo`,
+        emailWrapper(`
+          <p style="margin:0 0 6px;color:#b45309;font-size:22px;font-weight:700;">⚠️ Aplicaciones sin revisar</p>
+          <p style="margin:0 0 24px;color:#64748b;font-size:15px;">Hola,</p>
+          <p style="margin:0 0 16px;color:#334155;font-size:15px;line-height:1.6;">
+            Tienes <strong>${staleCount} aplicación${staleCount > 1 ? 'es' : ''}</strong> que lleva${staleCount > 1 ? 'n' : ''} más de <strong>44 horas</strong> sin revisión.
+          </p>
+          <p style="margin:0 0 16px;color:#334155;font-size:15px;line-height:1.6;">
+            Revísalas antes de que venzan las 48 horas:
+          </p>
+          <p style="margin:0 0 24px;">
+            <a href="https://contigomedicina.com/admin/dashboard"
+              style="color:#1e3a5f;font-weight:600;font-size:14px;">
+              contigomedicina.com/admin/dashboard
+            </a>
+          </p>
+          <p style="margin:0;color:#94a3b8;font-size:13px;">El equipo de Contigo</p>
+        `)
+      )
+      console.log(`Sent stale-applications alert: ${staleCount} pending > 44h.`)
+    } catch (err) {
+      console.error('Failed to send stale applications alert:', err)
+    }
+  }
+
   return new Response(
-    JSON.stringify({ processed: toRemind.length, sent, failed, remindersProcessed }),
+    JSON.stringify({ processed: toRemind.length, sent, failed, remindersProcessed, staleApplications: staleCount }),
     { headers: { 'Content-Type': 'application/json' } },
   )
 })

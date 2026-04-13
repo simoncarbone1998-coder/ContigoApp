@@ -70,7 +70,11 @@ export default function RegistroPage() {
 
   useEffect(() => {
     if (roleParam === 'laboratory') navigate('/lab/registro', { replace: true })
-  }, [roleParam, navigate])
+    if (roleParam === 'patient' || roleParam === null) {
+      // Patient registration moved to /aplicar (underwriting flow)
+      if (mode === 'patient') navigate('/aplicar', { replace: true })
+    }
+  }, [roleParam, navigate, mode])
 
   // Shared fields
   const [fullName,         setFullName]         = useState('')
@@ -124,7 +128,7 @@ export default function RegistroPage() {
           <div className="grid sm:grid-cols-3 gap-4">
             {/* Patient card */}
             <button
-              onClick={() => setMode('patient')}
+              onClick={() => navigate('/aplicar')}
               className="group bg-white rounded-2xl p-8 text-left hover:border-blue-400 border-2 border-transparent transition-all hover:shadow-xl hover:-translate-y-0.5 duration-200"
             >
               <div className="text-5xl mb-4">🧑‍⚕️</div>

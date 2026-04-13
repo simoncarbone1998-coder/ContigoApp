@@ -4,6 +4,7 @@ import InstallPrompt from './components/InstallPrompt'
 import LandingPage  from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
 import RegistroPage from './pages/RegistroPage'
+import AplicarPage from './pages/AplicarPage'
 
 // Patient pages
 import PatientPerfilPage    from './pages/paciente/PerfilPage'
@@ -12,6 +13,8 @@ import PatientCalendarioPage from './pages/paciente/CalendarioPage'
 import PatientPastillasPage  from './pages/paciente/PastillasPage'
 import PatientExamenesPage   from './pages/paciente/ExamenesPage'
 import PatientReferenciasPage from './pages/paciente/ReferenciasPage'
+import PatientPendingApplicationPage from './pages/paciente/PendingApplicationPage'
+import PatientRejectedApplicationPage from './pages/paciente/RejectedApplicationPage'
 
 // Doctor pages
 import DoctorPendingPage  from './pages/doctor/PendingPage'
@@ -46,10 +49,14 @@ export default function App() {
       {/* Public routes */}
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/aplicar" element={<AplicarPage />} />
+      {/* /registro still works — patient mode redirects to /aplicar, doctor mode stays */}
       <Route path="/registro" element={<RegistroPage />} />
 
       {/* Patient routes */}
       <Route element={<RequireRole role="patient" />}>
+        <Route path="/paciente/pending-application" element={<PatientPendingApplicationPage />} />
+        <Route path="/paciente/rejected"            element={<PatientRejectedApplicationPage />} />
         <Route path="/paciente/onboarding"  element={<PatientOnboarding />} />
         <Route path="/paciente/perfil"      element={<PatientPerfilPage />} />
         <Route path="/paciente/agendar"     element={<PatientAgendarPage />} />

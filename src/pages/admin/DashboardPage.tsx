@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import NavBar from '../../components/NavBar'
 import { useAuth } from '../../contexts/AuthContext'
-import type { Profile, Appointment } from '../../lib/types'
+import type { Profile, Appointment, PatientApplication, UnderwritingRulebook } from '../../lib/types'
 import type { Role } from '../../lib/types'
 import { specialtyLabel } from '../../lib/types'
 
@@ -39,7 +39,7 @@ const ROLE_COLORS: Record<Role, string> = {
   laboratory: 'bg-violet-50 text-violet-700 border-violet-200',
 }
 
-type Tab = 'appointments' | 'users' | 'ratings' | 'exams' | 'laboratories'
+type Tab = 'appointments' | 'users' | 'ratings' | 'exams' | 'laboratories' | 'applications' | 'underwriting'
 
 export default function AdminDashboard() {
   const { profile: adminProfile } = useAuth()
@@ -71,6 +71,44 @@ export default function AdminDashboard() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [labDetail,       setLabDetail]       = useState<any | null>(null)
 
+  // Applications state
+  const [applications,       setApplications]       = useState<PatientApplication[]>([])
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [questionnaires,     setQuestionnaires]     = useState<Record<string, any>>({})
+  const [appProcessingId,    setAppProcessingId]    = useState<string | null>(null)
+  const [appRejectTarget,    setAppRejectTarget]    = useState<PatientApplication | null>(null)
+  const [appRejectNote,      setAppRejectNote]      = useState('')
+  const [expandedQuestions,  setExpandedQuestions]  = useState<Record<string, boolean>>({})
+  const [historyFilter,      setHistoryFilter]      = useState<'all' | 'approved' | 'rejected'>('all')
+  const [historySearch,      setHistorySearch]      = useState('')
+
+  // Underwriting state
+  const [rulebooks,          setRulebooks]          = useState<UnderwritingRulebook[]>([])
+  const [uwTab,              setUwTab]              = useState<'config' | 'simulator' | 'history'>('config')
+  const [rbCostConsult,      setRbCostConsult]      = useState(40)
+  const [rbCostMed,          setRbCostMed]          = useState(8)
+  const [rbCostExam,         setRbCostExam]         = useState(12)
+  const [rbIncome,           setRbIncome]           = useState(19)
+  const [rbThresholdReview,  setRbThresholdReview]  = useState(1.0)
+  const [rbThresholdReject,  setRbThresholdReject]  = useState(2.0)
+  const [rbInstructions,     setRbInstructions]     = useState('')
+  const [rbVersionName,      setRbVersionName]      = useState('')
+  const [rbSaving,           setRbSaving]           = useState(false)
+  const [rbCompare,          setRbCompare]          = useState<string | null>(null)
+  // Simulator state
+  const [simAge,             setSimAge]             = useState('')
+  const [simSex,             setSimSex]             = useState('')
+  const [simConditions,      setSimConditions]      = useState<string[]>([])
+  const [simHospitalized,    setSimHospitalized]    = useState<boolean | null>(null)
+  const [simTreatment,       setSimTreatment]       = useState<boolean | null>(null)
+  const [simMeds,            setSimMeds]            = useState<boolean | null>(null)
+  const [simSmoking,         setSimSmoking]         = useState('')
+  const [simEps,             setSimEps]             = useState<boolean | null>(null)
+  const [simRulebookId,      setSimRulebookId]      = useState('')
+  const [simRunning,         setSimRunning]         = useState(false)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [simResult,          setSimResult]          = useState<any | null>(null)
+
   // User management state
   const [userSearch, setUserSearch] = useState('')
   const [userRoleFilter, setUserRoleFilter] = useState<Role | 'all'>('all')
@@ -96,6 +134,48 @@ export default function AdminDashboard() {
   const fetchLabs = useCallback(async () => {
     const { data } = await supabase.rpc('admin_get_all_labs')
     setAllLabs((data ?? []) as unknown[])
+  }, [])
+
+  const fetchApplications = useCallback(async () => {
+    const { data } = await supabase
+      .from('patient_applications')
+      .select('*, patient:patient_id(id, full_name, email, city, phone), rulebook:rulebook_version_id(version, name)')
+      .order('submitted_at', { ascending: false })
+    setApplications((data ?? []) as PatientApplication[])
+    // Fetch questionnaires for those patients
+    if (data && data.length > 0) {
+      const patientIds = data.map((a: PatientApplication) => a.patient_id)
+      const { data: qs } = await supabase
+        .from('health_questionnaire')
+        .select('*')
+        .in('patient_id', patientIds)
+      const qMap: Record<string, unknown> = {}
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(qs ?? []).forEach((q: any) => { qMap[q.patient_id] = q })
+      setQuestionnaires(qMap)
+    }
+  }, [])
+
+  const fetchRulebooks = useCallback(async () => {
+    const { data } = await supabase
+      .from('underwriting_rulebooks')
+      .select('*')
+      .order('version', { ascending: false })
+    const rbs = (data ?? []) as UnderwritingRulebook[]
+    setRulebooks(rbs)
+    const active = rbs.find((r) => r.is_active)
+    if (active) {
+      setRbCostConsult(active.cost_per_consultation_usd)
+      setRbCostMed(active.cost_per_medication_usd)
+      setRbCostExam(active.cost_per_exam_usd)
+      setRbIncome(active.monthly_income_usd)
+      setRbThresholdReview(active.threshold_review)
+      setRbThresholdReject(active.threshold_reject)
+      setRbInstructions(active.ai_instructions)
+      const nextVersion = (rbs[0]?.version ?? 1) + 1
+      setRbVersionName(`v${nextVersion} - `)
+      setSimRulebookId(active.id)
+    }
   }, [])
 
   async function handleLabApprove(lab: { id: string; name: string; email: string }) {
@@ -136,7 +216,7 @@ export default function AdminDashboard() {
     fetchLabs()
   }
 
-  useEffect(() => { fetchPending(); fetchLabs() }, [fetchPending, fetchLabs])
+  useEffect(() => { fetchPending(); fetchLabs(); fetchApplications(); fetchRulebooks() }, [fetchPending, fetchLabs, fetchApplications, fetchRulebooks])
 
   async function handleApprove(doctor: Profile) {
     setProcessingId(doctor.id)
@@ -191,6 +271,136 @@ export default function AdminDashboard() {
     showToast('Solicitud rechazada')
     setRejectReason('')
     setProcessingId(null)
+  }
+
+  // ── Application approve ──────────────────────────────────────────────────
+  async function handleAppApprove(app: PatientApplication) {
+    setAppProcessingId(app.id)
+    const now = new Date().toISOString()
+    await supabase.from('patient_applications').update({ status: 'approved', reviewed_at: now, reviewed_by: adminProfile?.id ?? null }).eq('id', app.id)
+    await supabase.from('profiles').update({ application_status: 'approved' }).eq('id', app.patient_id)
+    try {
+      await supabase.functions.invoke('send-email', {
+        body: {
+          to: app.patient?.email,
+          subject: '✅ ¡Tu aplicación fue aprobada! — Contigo',
+          html: `
+            <p>¡Bienvenido/a ${app.patient?.full_name ?? ''}! Tu aplicación ha sido aprobada.</p>
+            <p>Ya puedes acceder a todos los beneficios de Contigo.</p>
+            <br/>
+            <p><a href="https://contigomedicina.com/login" style="background:#1e3a5f;color:#fff;padding:12px 24px;border-radius:12px;text-decoration:none;font-weight:bold;">Ingresar →</a></p>
+            <br/>
+            <p>El equipo de Contigo</p>
+          `,
+        },
+      })
+    } catch { /* non-critical */ }
+    setApplications((prev) => prev.map((a) => a.id === app.id ? { ...a, status: 'approved' as const } : a))
+    showToast('✅ Paciente aprobado')
+    setAppProcessingId(null)
+  }
+
+  // ── Application reject ───────────────────────────────────────────────────
+  async function handleAppRejectConfirm() {
+    if (!appRejectTarget) return
+    const app = appRejectTarget
+    setAppProcessingId(app.id)
+    setAppRejectTarget(null)
+    const now = new Date().toISOString()
+    const reapplyAfter = new Date()
+    reapplyAfter.setMonth(reapplyAfter.getMonth() + 6)
+    const reapplyStr = reapplyAfter.toISOString().slice(0, 10)
+    await supabase.from('patient_applications').update({
+      status: 'rejected', reviewed_at: now, reviewed_by: adminProfile?.id ?? null,
+      admin_note: appRejectNote.trim() || null, reapply_after: reapplyStr,
+    }).eq('id', app.id)
+    await supabase.from('profiles').update({ application_status: 'rejected' }).eq('id', app.patient_id)
+    try {
+      const reapplyFormatted = reapplyAfter.toLocaleDateString('es-CO', { day: '2-digit', month: 'long', year: 'numeric' })
+      await supabase.functions.invoke('send-email', {
+        body: {
+          to: app.patient?.email,
+          subject: 'Tu aplicación en Contigo',
+          html: `
+            <p>Hola ${app.patient?.full_name ?? ''},</p>
+            <p>Hemos revisado tu aplicación y en este momento no podemos ofrecerte el plan actual de Contigo.</p>
+            <p>Podrás volver a aplicar a partir del <strong>${reapplyFormatted}</strong>.</p>
+            <br/>
+            <p>¿Tienes preguntas? <a href="mailto:hola@contigomedicina.com">hola@contigomedicina.com</a></p>
+            <br/>
+            <p>El equipo de Contigo</p>
+          `,
+        },
+      })
+    } catch { /* non-critical */ }
+    setApplications((prev) => prev.map((a) => a.id === app.id ? { ...a, status: 'rejected' as const } : a))
+    showToast('Aplicación rechazada')
+    setAppRejectNote('')
+    setAppProcessingId(null)
+  }
+
+  // ── Save new rulebook version ─────────────────────────────────────────────
+  async function handleSaveRulebook() {
+    if (!rbVersionName.trim()) { showToast('Por favor indica el nombre de la versión'); return }
+    setRbSaving(true)
+    // Deactivate all existing
+    await supabase.from('underwriting_rulebooks').update({ is_active: false }).neq('id', '00000000-0000-0000-0000-000000000000')
+    const nextVersion = (rulebooks[0]?.version ?? 0) + 1
+    const { data: newRb } = await supabase.from('underwriting_rulebooks').insert({
+      version: nextVersion,
+      name: rbVersionName.trim(),
+      is_active: true,
+      cost_per_consultation_usd: rbCostConsult,
+      cost_per_medication_usd: rbCostMed,
+      cost_per_exam_usd: rbCostExam,
+      monthly_income_usd: rbIncome,
+      threshold_review: rbThresholdReview,
+      threshold_reject: rbThresholdReject,
+      ai_instructions: rbInstructions,
+      created_by: adminProfile?.id ?? null,
+    }).select().single()
+    await fetchRulebooks()
+    if (newRb) setSimRulebookId((newRb as UnderwritingRulebook).id)
+    showToast(`✅ Versión "${rbVersionName.trim()}" guardada y activada`)
+    setRbSaving(false)
+  }
+
+  // ── Activate a rulebook version ──────────────────────────────────────────
+  async function handleActivateRulebook(rb: UnderwritingRulebook) {
+    await supabase.from('underwriting_rulebooks').update({ is_active: false }).neq('id', '00000000-0000-0000-0000-000000000000')
+    await supabase.from('underwriting_rulebooks').update({ is_active: true }).eq('id', rb.id)
+    await fetchRulebooks()
+    showToast(`Versión "${rb.name}" activada`)
+  }
+
+  // ── Run simulator ────────────────────────────────────────────────────────
+  async function handleSimulate() {
+    setSimRunning(true)
+    setSimResult(null)
+    try {
+      const { data } = await supabase.functions.invoke('underwrite-patient', {
+        body: {
+          questionnaire: {
+            age: simAge ? parseInt(simAge) : undefined,
+            biological_sex: simSex || undefined,
+            conditions: simConditions,
+            hospitalized_last_12m: simHospitalized ?? false,
+            active_treatment: simTreatment ?? false,
+            regular_medications: simMeds ?? false,
+            smoking_status: simSmoking || undefined,
+            has_eps: simEps ?? false,
+          },
+          rulebook_id: simRulebookId || undefined,
+          simulate: true,
+        },
+      })
+      setSimResult(data)
+    } catch (err) {
+      showToast('Error al ejecutar la simulación')
+      console.error(err)
+    } finally {
+      setSimRunning(false)
+    }
   }
 
   const fetchAll = useCallback(async () => {
@@ -309,12 +519,16 @@ export default function AdminDashboard() {
     ? (feedbacks.reduce((sum: number, f: any) => sum + f.rating, 0) / feedbacks.length)
     : 0
 
-  const tabs: { key: Tab; label: string; count: number }[] = [
+  const pendingApps = applications.filter((a) => a.status === 'pending')
+
+  const tabs: { key: Tab; label: string; count: number; badge?: boolean }[] = [
+    { key: 'applications', label: 'Aplicaciones',    count: pendingApps.length, badge: pendingApps.length > 0 },
     { key: 'appointments', label: 'Citas',           count: appointments.length },
     { key: 'users',        label: 'Usuarios',         count: allUsers.length },
     { key: 'ratings',      label: 'Calificaciones',   count: feedbacks.length },
     { key: 'exams',        label: 'Exámenes',         count: diagOrders.length },
     { key: 'laboratories', label: 'Laboratorios',     count: allLabs.length },
+    { key: 'underwriting', label: 'Underwriting',     count: rulebooks.length },
   ]
 
   // Filtered users for users tab
@@ -470,6 +684,40 @@ export default function AdminDashboard() {
                 )}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Application reject modal */}
+      {appRejectTarget && (
+        <div className="fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="text-2xl">🚫</div>
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Rechazar aplicación</h2>
+                <p className="text-sm text-slate-600 mt-1">
+                  ¿Rechazar la aplicación de <strong>{appRejectTarget.patient?.full_name ?? appRejectTarget.patient?.email}</strong>?
+                </p>
+                <p className="text-xs text-slate-400 mt-1">Podrá volver a aplicar en 6 meses.</p>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Nota interna (opcional)</label>
+              <textarea value={appRejectNote} onChange={(e) => setAppRejectNote(e.target.value)}
+                placeholder="Ej: Alto riesgo por múltiples condiciones crónicas..." rows={3}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 resize-none" />
+            </div>
+            <div className="flex gap-3 pt-1">
+              <button onClick={() => { setAppRejectTarget(null); setAppRejectNote('') }}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50">
+                Cancelar
+              </button>
+              <button onClick={handleAppRejectConfirm} disabled={appProcessingId === appRejectTarget.id}
+                className="flex-1 py-2.5 rounded-xl bg-red-600 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50">
+                Rechazar
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -659,19 +907,23 @@ export default function AdminDashboard() {
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
 
           {/* Tab bar */}
-          <div className="flex border-b border-slate-100">
+          <div className="flex flex-wrap border-b border-slate-100 overflow-x-auto">
             {tabs.map((t) => (
               <button
                 key={t.key}
                 onClick={() => setTab(t.key)}
-                className={`flex-1 py-4 text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${
+                className={`px-4 py-4 text-sm font-semibold transition-colors flex items-center justify-center gap-2 whitespace-nowrap ${
                   tab === t.key
                     ? 'text-blue-700 border-b-2 border-blue-700 bg-blue-50/50'
                     : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
                 }`}
               >
                 {t.label}
-                <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${tab === t.key ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>
+                <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${
+                  t.badge
+                    ? 'bg-red-500 text-white'
+                    : tab === t.key ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'
+                }`}>
                   {t.count}
                 </span>
               </button>
@@ -683,6 +935,48 @@ export default function AdminDashboard() {
               <div className="flex justify-center py-10">
                 <div className="w-8 h-8 border-4 border-blue-100 border-t-blue-700 rounded-full animate-spin" />
               </div>
+            ) : tab === 'applications' ? (
+              <ApplicationsSection
+                applications={applications}
+                questionnaires={questionnaires}
+                processingId={appProcessingId}
+                expandedQuestions={expandedQuestions}
+                onToggleQuestions={(id) => setExpandedQuestions((prev) => ({ ...prev, [id]: !prev[id] }))}
+                historyFilter={historyFilter}
+                onHistoryFilterChange={setHistoryFilter}
+                historySearch={historySearch}
+                onHistorySearchChange={setHistorySearch}
+                onApprove={handleAppApprove}
+                onReject={(app) => { setAppRejectTarget(app); setAppRejectNote('') }}
+              />
+            ) : tab === 'underwriting' ? (
+              <UnderwritingSection
+                rulebooks={rulebooks}
+                uwTab={uwTab}
+                onUwTabChange={setUwTab}
+                rbCostConsult={rbCostConsult} onRbCostConsultChange={setRbCostConsult}
+                rbCostMed={rbCostMed} onRbCostMedChange={setRbCostMed}
+                rbCostExam={rbCostExam} onRbCostExamChange={setRbCostExam}
+                rbIncome={rbIncome} onRbIncomeChange={setRbIncome}
+                rbThresholdReview={rbThresholdReview} onRbThresholdReviewChange={setRbThresholdReview}
+                rbThresholdReject={rbThresholdReject} onRbThresholdRejectChange={setRbThresholdReject}
+                rbInstructions={rbInstructions} onRbInstructionsChange={setRbInstructions}
+                rbVersionName={rbVersionName} onRbVersionNameChange={setRbVersionName}
+                rbSaving={rbSaving} onSaveRulebook={handleSaveRulebook}
+                rbCompare={rbCompare} onRbCompareChange={setRbCompare}
+                onActivateRulebook={handleActivateRulebook}
+                simAge={simAge} onSimAgeChange={setSimAge}
+                simSex={simSex} onSimSexChange={setSimSex}
+                simConditions={simConditions} onSimConditionsChange={setSimConditions}
+                simHospitalized={simHospitalized} onSimHospitalizedChange={setSimHospitalized}
+                simTreatment={simTreatment} onSimTreatmentChange={setSimTreatment}
+                simMeds={simMeds} onSimMedsChange={setSimMeds}
+                simSmoking={simSmoking} onSimSmokingChange={setSimSmoking}
+                simEps={simEps} onSimEpsChange={setSimEps}
+                simRulebookId={simRulebookId} onSimRulebookIdChange={setSimRulebookId}
+                simRunning={simRunning} onSimulate={handleSimulate}
+                simResult={simResult}
+              />
             ) : tab === 'users' ? (
               <UsersSection
                 users={filteredUsers}
@@ -721,6 +1015,738 @@ export default function AdminDashboard() {
           </div>
         </div>
       </main>
+    </div>
+  )
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function timeAgo(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime()
+  const diffH = Math.floor(diffMs / 3600000)
+  if (diffH < 1) return 'hace menos de 1 hora'
+  if (diffH < 24) return `hace ${diffH} hora${diffH > 1 ? 's' : ''}`
+  const diffD = Math.floor(diffH / 24)
+  return `hace ${diffD} día${diffD > 1 ? 's' : ''}`
+}
+
+function calcAge(dob: string | null): number | null {
+  if (!dob) return null
+  const birth = new Date(dob)
+  const today = new Date()
+  let age = today.getFullYear() - birth.getFullYear()
+  const m = today.getMonth() - birth.getMonth()
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--
+  return age
+}
+
+function hoursRemaining(iso: string): string {
+  const deadlineMs = new Date(iso).getTime() + 48 * 3600000
+  const remaining = deadlineMs - Date.now()
+  if (remaining <= 0) return '¡Vencida!'
+  const h = Math.floor(remaining / 3600000)
+  if (h >= 24) return `${Math.floor(h / 24)}d ${h % 24}h restantes`
+  return `${h}h restantes`
+}
+
+function RatioBadge({ ratio, threshReview, threshReject }: { ratio: number; threshReview: number; threshReject: number }) {
+  const cls = ratio <= threshReview
+    ? 'bg-green-100 text-green-700'
+    : ratio <= threshReject
+    ? 'bg-amber-100 text-amber-700'
+    : 'bg-red-100 text-red-700'
+  return <span className={`inline-block text-xs font-bold px-2 py-0.5 rounded-full ${cls}`}>{ratio.toFixed(2)}x</span>
+}
+
+function RecoBadge({ rec }: { rec: string }) {
+  const map: Record<string, string> = { approve: 'bg-green-100 text-green-700', review: 'bg-amber-100 text-amber-700', reject: 'bg-red-100 text-red-700' }
+  const label: Record<string, string> = { approve: 'APROBAR', review: 'REVISAR', reject: 'RECHAZAR' }
+  return <span className={`inline-block text-xs font-bold px-2.5 py-1 rounded-full ${map[rec] ?? 'bg-slate-100 text-slate-600'}`}>{label[rec] ?? rec.toUpperCase()}</span>
+}
+
+function ScenarioIcon({ viable }: { viable: boolean }) {
+  return viable
+    ? <span className="text-green-600 font-bold">✅</span>
+    : <span className="text-red-500 font-bold">❌</span>
+}
+
+const CONDITIONS_LIST = [
+  'Diabetes', 'Hipertensión arterial', 'Enfermedad cardíaca o coronaria',
+  'Cáncer activo o en tratamiento', 'Enfermedad renal crónica',
+  'Enfermedad pulmonar crónica (EPOC, asma severa)',
+  'Enfermedad autoinmune (lupus, artritis reumatoide)', 'VIH/SIDA',
+]
+
+// ── Applications Section ─────────────────────────────────────────────────────
+
+function ApplicationsSection({
+  applications, questionnaires, processingId, expandedQuestions, onToggleQuestions,
+  historyFilter, onHistoryFilterChange, historySearch, onHistorySearchChange,
+  onApprove, onReject,
+}: {
+  applications: PatientApplication[]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  questionnaires: Record<string, any>
+  processingId: string | null
+  expandedQuestions: Record<string, boolean>
+  onToggleQuestions: (id: string) => void
+  historyFilter: 'all' | 'approved' | 'rejected'
+  onHistoryFilterChange: (v: 'all' | 'approved' | 'rejected') => void
+  historySearch: string
+  onHistorySearchChange: (v: string) => void
+  onApprove: (app: PatientApplication) => void
+  onReject: (app: PatientApplication) => void
+}) {
+  const [appTab, setAppTab] = useState<'pending' | 'history'>('pending')
+  const pending  = applications.filter((a) => a.status === 'pending')
+  const reviewed = applications.filter((a) => a.status !== 'pending')
+
+  const filteredHistory = reviewed.filter((a) => {
+    const matchStatus = historyFilter === 'all' || a.status === historyFilter
+    const q = historySearch.toLowerCase()
+    const matchSearch = !q
+      || (a.patient?.full_name ?? '').toLowerCase().includes(q)
+      || (a.patient?.email ?? '').toLowerCase().includes(q)
+    return matchStatus && matchSearch
+  })
+
+  return (
+    <div className="space-y-4">
+      {/* Sub-tabs */}
+      <div className="flex gap-2 border-b border-slate-100 pb-3">
+        <button onClick={() => setAppTab('pending')}
+          className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors flex items-center gap-2 ${appTab === 'pending' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+          Pendientes
+          {pending.length > 0 && <span className="bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">{pending.length}</span>}
+        </button>
+        <button onClick={() => setAppTab('history')}
+          className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${appTab === 'history' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+          Historial ({reviewed.length})
+        </button>
+      </div>
+
+      {appTab === 'pending' ? (
+        pending.length === 0 ? (
+          <div className="flex flex-col items-center py-16 text-slate-400">
+            <span className="text-4xl mb-3">✅</span>
+            <p className="text-sm font-medium">No hay aplicaciones pendientes</p>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {pending.map((app) => (
+              <ApplicationCard
+                key={app.id}
+                app={app}
+                questionnaire={questionnaires[app.patient_id]}
+                processingId={processingId}
+                expanded={expandedQuestions[app.id] ?? false}
+                onToggleExpand={() => onToggleQuestions(app.id)}
+                onApprove={onApprove}
+                onReject={onReject}
+              />
+            ))}
+          </div>
+        )
+      ) : (
+        <div className="space-y-4">
+          {/* Filters */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input type="text" value={historySearch} onChange={(e) => onHistorySearchChange(e.target.value)}
+                placeholder="Buscar por nombre o correo..." className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+            </div>
+            <select value={historyFilter} onChange={(e) => onHistoryFilterChange(e.target.value as 'all' | 'approved' | 'rejected')}
+              className="border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400">
+              <option value="all">Todos</option>
+              <option value="approved">Aprobados</option>
+              <option value="rejected">Rechazados</option>
+            </select>
+          </div>
+
+          {filteredHistory.length === 0 ? (
+            <div className="text-center py-10 text-slate-400 text-sm">No hay aplicaciones que coincidan.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100">
+                    {['Paciente', 'Fecha', 'Rec. IA', 'Ratio', 'Decisión', 'Nota'].map((h) => (
+                      <th key={h} className="text-left py-3 pr-4 text-xs font-semibold text-slate-400 uppercase tracking-wide last:pr-0">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredHistory.map((app) => (
+                    <tr key={app.id} className="border-b border-slate-50 hover:bg-slate-50">
+                      <td className="py-3.5 pr-4">
+                        <p className="font-semibold text-slate-900">{app.patient?.full_name ?? '—'}</p>
+                        <p className="text-xs text-slate-400">{app.patient?.email}</p>
+                      </td>
+                      <td className="py-3.5 pr-4 text-slate-500 whitespace-nowrap text-xs">{new Date(app.submitted_at).toLocaleDateString('es-CO')}</td>
+                      <td className="py-3.5 pr-4">{app.ai_recommendation ? <RecoBadge rec={app.ai_recommendation} /> : '—'}</td>
+                      <td className="py-3.5 pr-4">{app.ai_ratio != null ? `${app.ai_ratio.toFixed(2)}x` : '—'}</td>
+                      <td className="py-3.5 pr-4">
+                        <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${app.status === 'approved' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                          {app.status === 'approved' ? 'Aprobado' : 'Rechazado'}
+                        </span>
+                      </td>
+                      <td className="py-3.5 text-slate-500 text-xs max-w-[200px] truncate">{app.admin_note ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ApplicationCard({
+  app, questionnaire, processingId, expanded, onToggleExpand, onApprove, onReject
+}: {
+  app: PatientApplication
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  questionnaire: any
+  processingId: string | null
+  expanded: boolean
+  onToggleExpand: () => void
+  onApprove: (app: PatientApplication) => void
+  onReject: (app: PatientApplication) => void
+}) {
+  const age = questionnaire ? calcAge(questionnaire.date_of_birth) : null
+  const threshReview = 1.0
+  const threshReject = 2.0
+
+  return (
+    <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white">
+      {/* Header */}
+      <div className="px-6 py-4 border-b border-slate-100 bg-slate-50">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="font-bold text-slate-900 text-base">
+              {app.patient?.full_name ?? '—'}{age != null ? `, ${age} años` : ''}
+              {app.patient?.city ? ` — ${app.patient.city}` : ''}
+            </p>
+            <p className="text-sm text-slate-500">{app.patient?.email}</p>
+            <p className="text-xs text-slate-400 mt-1">{timeAgo(app.submitted_at)} · {hoursRemaining(app.submitted_at)}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* AI Analysis */}
+      <div className="px-6 py-4 border-b border-slate-100">
+        <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">🤖 Análisis actuarial IA</p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+          <div className="bg-slate-50 rounded-xl p-3">
+            <p className="text-xs text-slate-400 mb-1">Recomendación</p>
+            {app.ai_recommendation ? <RecoBadge rec={app.ai_recommendation} /> : <span className="text-slate-400 text-xs">—</span>}
+          </div>
+          <div className="bg-slate-50 rounded-xl p-3">
+            <p className="text-xs text-slate-400 mb-1">Probabilidad alto costo</p>
+            <p className="font-bold text-slate-800">{app.ai_score != null ? `${app.ai_score}%` : '—'}</p>
+          </div>
+          <div className="bg-slate-50 rounded-xl p-3">
+            <p className="text-xs text-slate-400 mb-1">Costo esperado trim.</p>
+            <p className="font-bold text-slate-800">{app.ai_cost_expected_usd != null ? `$${app.ai_cost_expected_usd} USD` : '—'}</p>
+          </div>
+          <div className="bg-slate-50 rounded-xl p-3">
+            <p className="text-xs text-slate-400 mb-1">Ratio costo/ingreso</p>
+            {app.ai_ratio != null
+              ? <RatioBadge ratio={app.ai_ratio} threshReview={threshReview} threshReject={threshReject} />
+              : <span className="text-slate-400 text-xs">—</span>}
+          </div>
+        </div>
+
+        {/* Drivers */}
+        {app.ai_drivers && app.ai_drivers.length > 0 && (
+          <div className="mb-4">
+            <p className="text-xs font-semibold text-slate-500 mb-2">Drivers principales</p>
+            <ul className="space-y-1">
+              {app.ai_drivers.map((d, i) => (
+                <li key={i} className="flex items-start gap-2 text-xs text-slate-600">
+                  <span className="text-slate-400">•</span>
+                  <span><strong>{d.factor}</strong> — +${d.impact_usd} USD · {d.explanation}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Sensitivity table */}
+        {app.ai_sensitivity?.scenarios && (
+          <div className="mb-4">
+            <p className="text-xs font-semibold text-slate-500 mb-2">Análisis de sensibilidad</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs border border-slate-200 rounded-xl overflow-hidden">
+                <thead className="bg-slate-50">
+                  <tr>
+                    {['Escenario', 'Costo', 'Ratio'].map((h) => (
+                      <th key={h} className="text-left px-3 py-2 font-semibold text-slate-500">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {app.ai_sensitivity.scenarios.map((sc, i) => (
+                    <tr key={i} className="border-t border-slate-100">
+                      <td className="px-3 py-2 text-slate-700">{sc.name}</td>
+                      <td className="px-3 py-2 font-medium">${sc.cost_usd}</td>
+                      <td className="px-3 py-2">
+                        <span className="flex items-center gap-1">
+                          {sc.ratio.toFixed(2)}x <ScenarioIcon viable={sc.viable} />
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Reasoning */}
+        {app.ai_reasoning && (
+          <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 mb-3">
+            <p className="text-xs font-semibold text-blue-700 mb-1">Razonamiento IA</p>
+            <p className="text-xs text-blue-800 leading-relaxed">{app.ai_reasoning}</p>
+          </div>
+        )}
+
+        {app.rulebook && (
+          <p className="text-xs text-slate-400">Rulebook: {app.rulebook.name}</p>
+        )}
+      </div>
+
+      {/* Health questionnaire (expandable) */}
+      {questionnaire && (
+        <div className="border-b border-slate-100">
+          <button onClick={onToggleExpand}
+            className="w-full flex items-center justify-between px-6 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
+            <span>Ver datos del paciente</span>
+            <svg className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {expanded && (
+            <div className="px-6 pb-4 grid grid-cols-2 gap-3 text-xs">
+              {[
+                { label: 'Fecha de nacimiento', value: questionnaire.date_of_birth },
+                { label: 'Sexo biológico', value: questionnaire.biological_sex },
+                { label: 'Condiciones', value: (questionnaire.conditions ?? []).join(', ') || 'Ninguna' },
+                { label: 'Hospitalizado 12m', value: questionnaire.hospitalized_last_12m ? `Sí${questionnaire.hospitalization_reason ? `: ${questionnaire.hospitalization_reason}` : ''}` : 'No' },
+                { label: 'Tratamiento activo', value: questionnaire.active_treatment ? 'Sí' : 'No' },
+                { label: 'Medicamentos regulares', value: questionnaire.regular_medications ? `Sí${questionnaire.medications_detail ? `: ${questionnaire.medications_detail}` : ''}` : 'No' },
+                { label: 'Tabaquismo', value: questionnaire.smoking_status },
+                { label: 'EPS activa', value: questionnaire.has_eps ? 'Sí' : 'No' },
+              ].map(({ label, value }) => (
+                <div key={label} className="bg-slate-50 rounded-lg p-2.5">
+                  <p className="text-slate-400 font-medium mb-0.5">{label}</p>
+                  <p className="text-slate-700">{value ?? '—'}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="px-6 py-4 flex gap-3">
+        <button onClick={() => onApprove(app)} disabled={processingId === app.id}
+          className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-colors disabled:opacity-50">
+          {processingId === app.id ? '...' : '✅ Aprobar'}
+        </button>
+        <button onClick={() => onReject(app)} disabled={processingId === app.id}
+          className="flex-1 py-2.5 rounded-xl border border-red-200 bg-white hover:bg-red-50 text-red-600 text-sm font-semibold transition-colors disabled:opacity-50">
+          ❌ Rechazar
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Underwriting Section ─────────────────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function UnderwritingSection(props: any) {
+  const {
+    rulebooks, uwTab, onUwTabChange,
+    rbCostConsult, onRbCostConsultChange,
+    rbCostMed, onRbCostMedChange,
+    rbCostExam, onRbCostExamChange,
+    rbIncome, onRbIncomeChange,
+    rbThresholdReview, onRbThresholdReviewChange,
+    rbThresholdReject, onRbThresholdRejectChange,
+    rbInstructions, onRbInstructionsChange,
+    rbVersionName, onRbVersionNameChange,
+    rbSaving, onSaveRulebook,
+    rbCompare, onRbCompareChange,
+    onActivateRulebook,
+    simAge, onSimAgeChange,
+    simSex, onSimSexChange,
+    simConditions, onSimConditionsChange,
+    simHospitalized, onSimHospitalizedChange,
+    simTreatment, onSimTreatmentChange,
+    simMeds, onSimMedsChange,
+    simSmoking, onSimSmokingChange,
+    simEps, onSimEpsChange,
+    simRulebookId, onSimRulebookIdChange,
+    simRunning, onSimulate,
+    simResult,
+  } = props
+
+  const activeRulebook = rulebooks.find((r: UnderwritingRulebook) => r.is_active)
+  const incomeInput = 'w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400'
+
+  function toggleSimCondition(cond: string) {
+    onSimConditionsChange((prev: string[]) =>
+      prev.includes(cond) ? prev.filter((c: string) => c !== cond) : [...prev, cond]
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Sub-tabs */}
+      <div className="flex gap-2 flex-wrap border-b border-slate-100 pb-3">
+        {[['config', 'Configuración activa'], ['simulator', 'Simulador'], ['history', 'Historial de versiones']].map(([key, label]) => (
+          <button key={key} onClick={() => onUwTabChange(key)}
+            className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${uwTab === key ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+            {key === 'simulator' ? '🧪 ' : key === 'history' ? '📋 ' : '⚙️ '}{label}
+          </button>
+        ))}
+      </div>
+
+      {/* TAB: Config */}
+      {uwTab === 'config' && (
+        <div className="space-y-6 max-w-2xl">
+          {activeRulebook && (
+            <div className="text-xs bg-blue-50 border border-blue-200 rounded-xl px-4 py-2 text-blue-700 font-semibold">
+              Versión activa: {activeRulebook.name}
+            </div>
+          )}
+
+          <div>
+            <p className="text-sm font-bold text-slate-700 mb-3">Modelo de costos (USD)</p>
+            <div className="grid grid-cols-2 gap-4">
+              {[
+                { label: 'Costo por consulta', value: rbCostConsult, onChange: onRbCostConsultChange },
+                { label: 'Costo por medicamentos', value: rbCostMed, onChange: onRbCostMedChange },
+                { label: 'Costo por examen', value: rbCostExam, onChange: onRbCostExamChange },
+                { label: 'Ingreso mensual', value: rbIncome, onChange: onRbIncomeChange },
+              ].map(({ label, value, onChange }) => (
+                <div key={label}>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">{label}</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+                    <input type="number" value={value} onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
+                      className={incomeInput + ' pl-7'} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <p className="text-sm font-bold text-slate-700 mb-3">Umbrales de decisión</p>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">Ratio para revisión manual</label>
+                <input type="number" step="0.1" value={rbThresholdReview} onChange={(e) => onRbThresholdReviewChange(parseFloat(e.target.value) || 0)} className={incomeInput} />
+                <p className="text-xs text-slate-400 mt-1">Si costo esperado {'>'} Xx el ingreso → revisar</p>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">Ratio para rechazo</label>
+                <input type="number" step="0.1" value={rbThresholdReject} onChange={(e) => onRbThresholdRejectChange(parseFloat(e.target.value) || 0)} className={incomeInput} />
+                <p className="text-xs text-slate-400 mt-1">Si costo esperado {'>'} Xx el ingreso → rechazar</p>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-bold text-slate-700 mb-2">Instrucciones para la IA</label>
+            <textarea value={rbInstructions} onChange={(e) => onRbInstructionsChange(e.target.value)}
+              rows={8} className={incomeInput + ' resize-y'}
+              placeholder="Escribe en lenguaje natural cómo quieres que la IA evalúe el riesgo..." />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 mb-1">Nombre de esta versión</label>
+            <input type="text" value={rbVersionName} onChange={(e) => onRbVersionNameChange(e.target.value)}
+              placeholder='Ej: "v2 - Ajuste julio 2026"' className={incomeInput} />
+          </div>
+
+          <button onClick={onSaveRulebook} disabled={rbSaving}
+            className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm transition-colors disabled:opacity-50">
+            {rbSaving ? 'Guardando...' : '💾 Guardar como nueva versión'}
+          </button>
+        </div>
+      )}
+
+      {/* TAB: Simulator */}
+      {uwTab === 'simulator' && (
+        <div className="grid lg:grid-cols-2 gap-8">
+          <div className="space-y-5">
+            <h3 className="font-bold text-slate-800">Perfil del paciente</h3>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 mb-1">Edad</label>
+              <input type="number" value={simAge} onChange={(e) => onSimAgeChange(e.target.value)}
+                placeholder="ej: 45" className={incomeInput} />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 mb-2">Sexo biológico</label>
+              <div className="flex gap-2 flex-wrap">
+                {[['masculino', 'Masculino'], ['femenino', 'Femenino'], ['otro', 'Otro']].map(([v, l]) => (
+                  <label key={v} className={`px-3 py-2 rounded-xl border-2 cursor-pointer text-sm transition-colors ${simSex === v ? 'border-blue-500 bg-blue-50 text-blue-700 font-medium' : 'border-slate-200 text-slate-600'}`}>
+                    <input type="radio" name="simSex" value={v} checked={simSex === v} onChange={() => onSimSexChange(v)} className="sr-only" />{l}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 mb-2">Condiciones médicas</label>
+              <div className="space-y-1.5">
+                {CONDITIONS_LIST.map((cond) => (
+                  <label key={cond} className={`flex items-center gap-2 p-2.5 rounded-xl border-2 cursor-pointer text-xs transition-colors ${simConditions.includes(cond) ? 'border-blue-500 bg-blue-50' : 'border-slate-200'}`}>
+                    <input type="checkbox" checked={simConditions.includes(cond)} onChange={() => toggleSimCondition(cond)} className="w-3.5 h-3.5 text-blue-600 rounded" />
+                    <span>{cond}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {[
+              { label: 'Hospitalizado en últimos 12m', value: simHospitalized, onChange: onSimHospitalizedChange, name: 'simHosp' },
+              { label: 'Tratamiento médico activo', value: simTreatment, onChange: onSimTreatmentChange, name: 'simTreat' },
+              { label: 'Medicamentos regulares', value: simMeds, onChange: onSimMedsChange, name: 'simMeds' },
+              { label: 'EPS activa', value: simEps, onChange: onSimEpsChange, name: 'simEps' },
+            ].map(({ label, value, onChange, name }) => (
+              <div key={name}>
+                <label className="block text-xs font-semibold text-slate-500 mb-2">{label}</label>
+                <div className="flex gap-2">
+                  {[['true', 'Sí'], ['false', 'No']].map(([v, l]) => (
+                    <label key={v} className={`px-3 py-2 rounded-xl border-2 cursor-pointer text-sm transition-colors ${String(value) === v ? 'border-blue-500 bg-blue-50 text-blue-700 font-medium' : 'border-slate-200 text-slate-600'}`}>
+                      <input type="radio" name={name} checked={String(value) === v} onChange={() => onChange(v === 'true')} className="sr-only" />{l}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 mb-2">Tabaquismo</label>
+              <div className="grid grid-cols-2 gap-2">
+                {[['no_fumo', 'No fumo'], ['exfumador', 'Exfumador'], ['ocasional', 'Ocasional'], ['regular', 'Regular']].map(([v, l]) => (
+                  <label key={v} className={`p-2.5 rounded-xl border-2 cursor-pointer text-xs text-center transition-colors ${simSmoking === v ? 'border-blue-500 bg-blue-50 text-blue-700 font-medium' : 'border-slate-200 text-slate-600'}`}>
+                    <input type="radio" name="simSmoking" checked={simSmoking === v} onChange={() => onSimSmokingChange(v)} className="sr-only" />{l}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 mb-1">Evaluar con rulebook</label>
+              <select value={simRulebookId} onChange={(e) => onSimRulebookIdChange(e.target.value)} className={incomeInput}>
+                {rulebooks.map((rb: UnderwritingRulebook) => (
+                  <option key={rb.id} value={rb.id}>{rb.name}{rb.is_active ? ' (activo)' : ''}</option>
+                ))}
+              </select>
+            </div>
+
+            <button onClick={onSimulate} disabled={simRunning}
+              className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+              {simRunning ? (
+                <><svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" /><path fill="currentColor" className="opacity-75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Evaluando...</>
+              ) : '🤖 Evaluar con IA →'}
+            </button>
+          </div>
+
+          {/* Results panel */}
+          <div>
+            {simResult ? (
+              <div className="border border-slate-200 rounded-2xl p-5 space-y-4">
+                <h3 className="font-bold text-slate-800 text-base border-b border-slate-100 pb-3">Resultado de simulación</h3>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-slate-50 rounded-xl p-3">
+                    <p className="text-xs text-slate-400 mb-1">Recomendación</p>
+                    <RecoBadge rec={simResult.recommendation} />
+                  </div>
+                  <div className="bg-slate-50 rounded-xl p-3">
+                    <p className="text-xs text-slate-400 mb-1">Probabilidad alto costo</p>
+                    <p className="font-bold text-slate-800">{Math.round((simResult.probability_high_cost ?? 0) * 100)}%</p>
+                  </div>
+                  <div className="bg-slate-50 rounded-xl p-3">
+                    <p className="text-xs text-slate-400 mb-1">Costo esperado</p>
+                    <p className="font-bold text-slate-800">${simResult.cost_breakdown?.total_expected_cost_usd ?? '—'} USD</p>
+                  </div>
+                  <div className="bg-slate-50 rounded-xl p-3">
+                    <p className="text-xs text-slate-400 mb-1">Ratio</p>
+                    {simResult.ratio != null
+                      ? <RatioBadge ratio={simResult.ratio} threshReview={1.0} threshReject={2.0} />
+                      : <span className="text-slate-400 text-xs">—</span>}
+                  </div>
+                </div>
+
+                {simResult.cost_breakdown && (
+                  <div>
+                    <p className="text-xs font-semibold text-slate-500 mb-2">Desglose de costos</p>
+                    <ul className="space-y-1 text-xs text-slate-600">
+                      <li>• Consultas: <strong>${simResult.cost_breakdown.consultations_cost}</strong> ({simResult.cost_breakdown.consultations_per_quarter}/trimestre)</li>
+                      <li>• Medicamentos: <strong>${simResult.cost_breakdown.medications_cost}</strong> ({simResult.cost_breakdown.medications_per_month}/mes)</li>
+                      <li>• Exámenes: <strong>${simResult.cost_breakdown.exams_cost}</strong> ({simResult.cost_breakdown.exams_per_quarter}/trimestre)</li>
+                    </ul>
+                  </div>
+                )}
+
+                {simResult.sensitivity_analysis?.scenarios && (
+                  <div>
+                    <p className="text-xs font-semibold text-slate-500 mb-2">Análisis de sensibilidad</p>
+                    <table className="w-full text-xs border border-slate-200 rounded-xl overflow-hidden">
+                      <thead className="bg-slate-50">
+                        <tr>
+                          <th className="text-left px-3 py-2 font-semibold text-slate-500">Escenario</th>
+                          <th className="text-left px-3 py-2 font-semibold text-slate-500">Costo</th>
+                          <th className="text-left px-3 py-2 font-semibold text-slate-500">Ratio</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {simResult.sensitivity_analysis.scenarios.map((sc: { name: string; cost_usd: number; ratio: number; viable: boolean }, i: number) => (
+                          <tr key={i} className="border-t border-slate-100">
+                            <td className="px-3 py-2">{sc.name}</td>
+                            <td className="px-3 py-2 font-medium">${sc.cost_usd}</td>
+                            <td className="px-3 py-2"><span className="flex items-center gap-1">{sc.ratio.toFixed(2)}x <ScenarioIcon viable={sc.viable} /></span></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {simResult.sensitivity_analysis.breakeven_ratio_explanation && (
+                      <p className="text-xs text-slate-500 mt-2 italic">{simResult.sensitivity_analysis.breakeven_ratio_explanation}</p>
+                    )}
+                  </div>
+                )}
+
+                {simResult.reasoning && (
+                  <div className="bg-blue-50 border border-blue-100 rounded-xl p-3">
+                    <p className="text-xs font-semibold text-blue-700 mb-1">Razonamiento completo</p>
+                    <p className="text-xs text-blue-800 leading-relaxed">{simResult.reasoning}</p>
+                  </div>
+                )}
+
+                {simResult.rulebook && (
+                  <p className="text-xs text-slate-400">Rulebook usado: {simResult.rulebook.name}</p>
+                )}
+              </div>
+            ) : (
+              <div className="border-2 border-dashed border-slate-200 rounded-2xl p-12 text-center text-slate-400">
+                <p className="text-3xl mb-3">🤖</p>
+                <p className="text-sm font-medium">Completa el perfil y haz clic en "Evaluar con IA" para ver el resultado</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB: History */}
+      {uwTab === 'history' && (
+        <div className="space-y-4">
+          {rulebooks.length === 0 ? (
+            <div className="text-center py-10 text-slate-400 text-sm">No hay versiones de rulebook.</div>
+          ) : (
+            <>
+              {rbCompare && (
+                <RulebookCompare
+                  active={rulebooks.find((r: UnderwritingRulebook) => r.is_active)!}
+                  other={rulebooks.find((r: UnderwritingRulebook) => r.id === rbCompare)!}
+                  onClose={() => onRbCompareChange(null)}
+                />
+              )}
+              <div className="space-y-3">
+                {rulebooks.map((rb: UnderwritingRulebook) => (
+                  <div key={rb.id} className="border border-slate-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <p className="font-semibold text-slate-900">{rb.name}</p>
+                        {rb.is_active && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-bold">Activa</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-400">
+                        v{rb.version} · Creada el {new Date(rb.created_at).toLocaleDateString('es-CO')} ·
+                        Consulta: ${rb.cost_per_consultation_usd} · Umbrales: {rb.threshold_review}x / {rb.threshold_reject}x
+                      </p>
+                    </div>
+                    <div className="flex gap-2 shrink-0">
+                      {!rb.is_active && (
+                        <>
+                          <button onClick={() => onActivateRulebook(rb)}
+                            className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 transition-colors">
+                            Activar
+                          </button>
+                          <button onClick={() => onRbCompareChange(rb.id)}
+                            className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 font-semibold transition-colors">
+                            Comparar
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function RulebookCompare({ active, other, onClose }: { active: UnderwritingRulebook; other: UnderwritingRulebook; onClose: () => void }) {
+  if (!active || !other) return null
+  const fields: { label: string; key: keyof UnderwritingRulebook }[] = [
+    { label: 'Costo consulta', key: 'cost_per_consultation_usd' },
+    { label: 'Costo medicamentos', key: 'cost_per_medication_usd' },
+    { label: 'Costo examen', key: 'cost_per_exam_usd' },
+    { label: 'Ingreso mensual', key: 'monthly_income_usd' },
+    { label: 'Umbral revisión', key: 'threshold_review' },
+    { label: 'Umbral rechazo', key: 'threshold_reject' },
+  ]
+  return (
+    <div className="border border-amber-200 bg-amber-50 rounded-2xl p-4 mb-4">
+      <div className="flex items-center justify-between mb-3">
+        <h4 className="font-bold text-slate-800 text-sm">Comparación de versiones</h4>
+        <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl leading-none">×</button>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-amber-200">
+              <th className="text-left py-2 pr-4 font-semibold text-slate-500">Parámetro</th>
+              <th className="text-left py-2 pr-4 font-semibold text-slate-500">{active.name} (Activa)</th>
+              <th className="text-left py-2 font-semibold text-slate-500">{other.name}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {fields.map(({ label, key }) => {
+              const aVal = active[key]
+              const bVal = other[key]
+              const changed = aVal !== bVal
+              return (
+                <tr key={key} className={`border-b border-amber-100 ${changed ? 'bg-yellow-100' : ''}`}>
+                  <td className="py-2 pr-4 text-slate-600 font-medium">{label}</td>
+                  <td className="py-2 pr-4 text-slate-800">{String(aVal)}</td>
+                  <td className="py-2 text-slate-800">{String(bVal)}{changed ? ' ←' : ''}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }

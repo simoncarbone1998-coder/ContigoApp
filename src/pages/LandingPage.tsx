@@ -138,7 +138,7 @@ export default function LandingPage() {
                   className="px-4 py-3 rounded-xl border-2 border-blue-600 text-blue-600 text-sm font-semibold text-center hover:bg-blue-50 transition-colors">
                   Iniciar sesión
                 </Link>
-                <Link to="/registro"
+                <Link to="/aplicar"
                   className="px-4 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold text-center transition-colors">
                   Comenzar ahora
                 </Link>
@@ -186,7 +186,7 @@ export default function LandingPage() {
                 .
               </p>
               <div className="flex flex-wrap gap-4">
-                <Link to="/registro"
+                <Link to="/aplicar"
                   className="px-7 py-3.5 bg-white text-[#1e3a5f] font-bold rounded-2xl hover:scale-[1.03] hover:bg-blue-50 transition-all duration-200 shadow-xl shadow-black/25 text-sm">
                   Comenzar ahora
                 </Link>
@@ -273,7 +273,7 @@ export default function LandingPage() {
               <div className="rounded-2xl p-8 text-center" style={{ background: '#f0f7ff' }}>
                 <p className="text-3xl font-extrabold text-blue-700 mb-1">$80.000 COP / mes</p>
                 <p className="text-sm text-slate-500 mb-6">Menos de lo que ya gastas en soluciones informales</p>
-                <Link to="/registro"
+                <Link to="/aplicar"
                   className="inline-flex items-center px-7 py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl transition-colors shadow-sm shadow-blue-100">
                   Comenzar ahora
                 </Link>
@@ -347,7 +347,7 @@ export default function LandingPage() {
           </p>
 
           <div className="fade-up">
-            <Link to="/registro"
+            <Link to="/aplicar"
               className="inline-flex items-center px-9 py-4 bg-white text-[#1e3a5f] font-bold rounded-2xl hover:scale-[1.03] transition-all duration-200 shadow-2xl text-sm">
               Únete a Contigo
             </Link>
