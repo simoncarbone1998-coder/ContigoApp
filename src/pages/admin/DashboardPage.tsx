@@ -39,7 +39,7 @@ const ROLE_COLORS: Record<Role, string> = {
   laboratory: 'bg-violet-50 text-violet-700 border-violet-200',
 }
 
-type Tab = 'appointments' | 'users' | 'ratings' | 'exams' | 'laboratories' | 'applications' | 'underwriting'
+type Tab = 'appointments' | 'users' | 'ratings' | 'exams' | 'laboratories' | 'applications' | 'underwriting' | 'chat'
 
 export default function AdminDashboard() {
   const { profile: adminProfile } = useAuth()
@@ -108,6 +108,26 @@ export default function AdminDashboard() {
   const [simRunning,         setSimRunning]         = useState(false)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [simResult,          setSimResult]          = useState<any | null>(null)
+
+  // Chat IA state
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [chatDocuments,    setChatDocuments]    = useState<any[]>([])
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [chatConfig,       setChatConfig]       = useState<any | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [chatLeads,        setChatLeads]        = useState<any[]>([])
+  const [chatSubTab,       setChatSubTab]       = useState<'documents' | 'prompt' | 'simulator' | 'leads'>('documents')
+  const [chatPrompt,       setChatPrompt]       = useState('')
+  const [chatPromptSaving, setChatPromptSaving] = useState(false)
+  const [chatUploading,    setChatUploading]    = useState(false)
+  const [chatDeleteTarget, setChatDeleteTarget] = useState<string | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [chatLeadDetail,   setChatLeadDetail]   = useState<any | null>(null)
+  const [chatSimMsgs,      setChatSimMsgs]      = useState<{role:'user'|'assistant';content:string;id:string}[]>([])
+  const [chatSimInput,     setChatSimInput]     = useState('')
+  const [chatSimLoading,   setChatSimLoading]   = useState(false)
+  const [chatSimUseCustom, setChatSimUseCustom] = useState(false)
+  const chatSimHistoryRef  = useRef<{role:'user'|'assistant';content:string}[]>([])
 
   // User management state
   const [userSearch, setUserSearch] = useState('')
@@ -178,6 +198,149 @@ export default function AdminDashboard() {
     }
   }, [])
 
+  const fetchChatDocuments = useCallback(async () => {
+    const { data } = await supabase.from('chat_documents').select('*').order('created_at', { ascending: false })
+    setChatDocuments(data ?? [])
+  }, [])
+
+  const fetchChatConfig = useCallback(async () => {
+    const { data } = await supabase.from('chat_config').select('*').order('updated_at', { ascending: false }).limit(1).maybeSingle()
+    if (data) { setChatConfig(data); setChatPrompt(data.system_prompt) }
+  }, [])
+
+  const fetchChatLeads = useCallback(async () => {
+    const { data } = await supabase.from('chat_leads').select('*').order('created_at', { ascending: false })
+    setChatLeads(data ?? [])
+  }, [])
+
+  async function handleUploadChatFile(files: FileList | null) {
+    if (!files || files.length === 0) return
+    const allowed = ['pdf', 'docx', 'txt']
+    for (const file of Array.from(files)) {
+      const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
+      if (!allowed.includes(ext)) { showToast(`Tipo no soportado: ${file.name}`); continue }
+      if (file.size > 10 * 1024 * 1024) { showToast(`Archivo demasiado grande: ${file.name}`); continue }
+
+      setChatUploading(true)
+      const pathId = crypto.randomUUID()
+      const storagePath = `${pathId}/${file.name}`
+
+      const { error: upErr } = await supabase.storage.from('chat-documents').upload(storagePath, file)
+      if (upErr) { showToast(`Error al subir ${file.name}`); setChatUploading(false); continue }
+
+      const fmt = (b: number) => b < 1048576 ? `${(b / 1024).toFixed(1)} KB` : `${(b / 1048576).toFixed(1)} MB`
+
+      const { data: docData, error: insErr } = await supabase.from('chat_documents').insert({
+        name: file.name.replace(/\.[^.]+$/, ''),
+        file_url: storagePath,
+        file_name: file.name,
+        file_type: ext,
+        file_size: fmt(file.size),
+        status: 'processing',
+        uploaded_by: adminProfile?.id ?? null,
+      }).select().single()
+
+      if (insErr || !docData) { showToast(`Error al registrar ${file.name}`); setChatUploading(false); continue }
+
+      supabase.functions.invoke('process-document', { body: { document_id: (docData as {id:string}).id } })
+        .catch(() => {})
+      setTimeout(fetchChatDocuments, 4000)
+      setChatUploading(false)
+      showToast(`${file.name} subido, procesando...`)
+      fetchChatDocuments()
+    }
+  }
+
+  async function handleDeleteChatDocument(docId: string) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const doc = chatDocuments.find((d: any) => d.id === docId)
+    if (doc?.file_url) {
+      await supabase.storage.from('chat-documents').remove([doc.file_url])
+    }
+    await supabase.from('chat_documents').delete().eq('id', docId)
+    setChatDeleteTarget(null)
+    fetchChatDocuments()
+    showToast('Documento eliminado')
+  }
+
+  async function handleSaveChatPrompt() {
+    if (!chatPrompt.trim()) return
+    setChatPromptSaving(true)
+    if (chatConfig?.id) {
+      await supabase.from('chat_config').update({
+        system_prompt: chatPrompt.trim(),
+        updated_by: adminProfile?.id ?? null,
+        updated_at: new Date().toISOString(),
+      }).eq('id', chatConfig.id)
+    } else {
+      await supabase.from('chat_config').insert({
+        system_prompt: chatPrompt.trim(),
+        is_active: true,
+        updated_by: adminProfile?.id ?? null,
+      })
+    }
+    await fetchChatConfig()
+    setChatPromptSaving(false)
+    showToast('✅ Prompt guardado')
+  }
+
+  function handleResetChatPrompt() {
+    const defaultPrompt = `Eres un asistente de Contigo, una plataforma de salud colombiana. Tu rol es responder preguntas sobre el plan de salud de Contigo basándote ÚNICAMENTE en los documentos proporcionados.
+
+REGLAS:
+- Solo responde sobre lo que está en los documentos
+- Si no sabes algo, di "No tengo información sobre eso en este momento. Te recomiendo hablar con un asesor."
+- Nunca inventes información sobre precios, coberturas o condiciones que no estén en los documentos
+- Sé amable, conciso y profesional
+- Responde en el mismo idioma que usa el usuario
+- Máximo 3 párrafos por respuesta
+- No discutas temas fuera del plan de Contigo`
+    setChatPrompt(defaultPrompt)
+    showToast('Prompt restablecido. Guarda para aplicar.')
+  }
+
+  async function handleChatSimSend() {
+    const text = chatSimInput.trim()
+    if (!text || chatSimLoading) return
+    const msgId = Date.now().toString()
+    setChatSimMsgs(prev => [...prev, { role: 'user', content: text, id: msgId }])
+    setChatSimInput('')
+    setChatSimLoading(true)
+    const prevHistory = [...chatSimHistoryRef.current]
+    try {
+      const { data, error } = await supabase.functions.invoke('chat', {
+        body: {
+          message: text,
+          conversation_history: prevHistory.slice(-10),
+          ...(chatSimUseCustom ? { custom_system_prompt: chatPrompt } : {}),
+        },
+      })
+      if (error || !data?.reply) throw new Error('No response')
+      const reply = data.reply as string
+      setChatSimMsgs(prev => [...prev, { role: 'assistant', content: reply, id: (Date.now() + 1).toString() }])
+      chatSimHistoryRef.current = [...prevHistory, { role: 'user', content: text }, { role: 'assistant', content: reply }]
+    } catch {
+      setChatSimMsgs(prev => [...prev, { role: 'assistant', content: 'Error al conectar con el asistente.', id: (Date.now() + 1).toString() }])
+    } finally {
+      setChatSimLoading(false)
+    }
+  }
+
+  function exportChatLeadsCSV() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rows = chatLeads.map((l: any) => [
+      `"${(l.name ?? '').replace(/"/g, '""')}"`,
+      `"${(l.email ?? '').replace(/"/g, '""')}"`,
+      `"${(l.phone ?? '').replace(/"/g, '""')}"`,
+      `"${new Date(l.created_at).toLocaleDateString('es-CO')}"`,
+    ].join(','))
+    const csv = ['Nombre,Email,Teléfono,Fecha', ...rows].join('\n')
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
+    const a = document.createElement('a')
+    a.href = url; a.download = 'leads_chat.csv'; a.click()
+    URL.revokeObjectURL(url)
+  }
+
   async function handleLabApprove(lab: { id: string; name: string; email: string }) {
     setLabProcessingId(lab.id)
     await supabase.rpc('admin_approve_lab', { p_id: lab.id })
@@ -216,7 +379,16 @@ export default function AdminDashboard() {
     fetchLabs()
   }
 
-  useEffect(() => { fetchPending(); fetchLabs(); fetchApplications(); fetchRulebooks() }, [fetchPending, fetchLabs, fetchApplications, fetchRulebooks])
+  useEffect(() => { fetchPending(); fetchLabs(); fetchApplications(); fetchRulebooks(); fetchChatDocuments(); fetchChatConfig(); fetchChatLeads() }, [fetchPending, fetchLabs, fetchApplications, fetchRulebooks, fetchChatDocuments, fetchChatConfig, fetchChatLeads])
+
+  // Poll while any document is still processing
+  useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (chatDocuments.some((d: any) => d.status === 'processing')) {
+      const t = setInterval(fetchChatDocuments, 3000)
+      return () => clearInterval(t)
+    }
+  }, [chatDocuments, fetchChatDocuments])
 
   async function handleApprove(doctor: Profile) {
     setProcessingId(doctor.id)
@@ -529,6 +701,7 @@ export default function AdminDashboard() {
     { key: 'exams',        label: 'Exámenes',         count: diagOrders.length },
     { key: 'laboratories', label: 'Laboratorios',     count: allLabs.length },
     { key: 'underwriting', label: 'Underwriting',     count: rulebooks.length },
+    { key: 'chat',         label: 'Chat IA',          count: chatDocuments.length },
   ]
 
   // Filtered users for users tab
@@ -1009,6 +1182,34 @@ export default function AdminDashboard() {
                   onDetail={setLabDetail}
                 />
               )
+            ) : tab === 'chat' ? (
+              <ChatIASection
+                documents={chatDocuments}
+                config={chatConfig}
+                leads={chatLeads}
+                subTab={chatSubTab}
+                onSubTabChange={setChatSubTab}
+                onUpload={handleUploadChatFile}
+                uploading={chatUploading}
+                deleteTarget={chatDeleteTarget}
+                onDeleteTarget={setChatDeleteTarget}
+                onDeleteConfirm={handleDeleteChatDocument}
+                promptText={chatPrompt}
+                onPromptTextChange={setChatPrompt}
+                promptSaving={chatPromptSaving}
+                onSavePrompt={handleSaveChatPrompt}
+                onResetPrompt={handleResetChatPrompt}
+                simMsgs={chatSimMsgs}
+                simInput={chatSimInput}
+                onSimInputChange={setChatSimInput}
+                simLoading={chatSimLoading}
+                simUseCustom={chatSimUseCustom}
+                onSimUseCustomChange={setChatSimUseCustom}
+                onSimSend={handleChatSimSend}
+                leadDetail={chatLeadDetail}
+                onLeadDetail={setChatLeadDetail}
+                onExportLeads={exportChatLeadsCSV}
+              />
             ) : (
               <AppointmentsTable appointments={appointments} cancelling={cancelling} onCancel={handleCancel} />
             )}
@@ -2241,6 +2442,361 @@ function AppointmentsTable({
           ))}
         </tbody>
       </table>
+    </div>
+  )
+}
+
+// ── ChatIASection ─────────────────────────────────────────────────────────────
+
+function ChatIASection({
+  documents, leads, subTab, onSubTabChange,
+  onUpload, uploading, deleteTarget, onDeleteTarget, onDeleteConfirm,
+  promptText, onPromptTextChange, promptSaving, onSavePrompt, onResetPrompt,
+  simMsgs, simInput, onSimInputChange, simLoading, simUseCustom, onSimUseCustomChange, onSimSend,
+  leadDetail, onLeadDetail, onExportLeads,
+}: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  documents: any[]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  config: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  leads: any[]
+  subTab: 'documents' | 'prompt' | 'simulator' | 'leads'
+  onSubTabChange: (t: 'documents' | 'prompt' | 'simulator' | 'leads') => void
+  onUpload: (files: FileList | null) => void
+  uploading: boolean
+  deleteTarget: string | null
+  onDeleteTarget: (id: string | null) => void
+  onDeleteConfirm: (id: string) => void
+  promptText: string
+  onPromptTextChange: (v: string) => void
+  promptSaving: boolean
+  onSavePrompt: () => void
+  onResetPrompt: () => void
+  simMsgs: {role:'user'|'assistant';content:string;id:string}[]
+  simInput: string
+  onSimInputChange: (v: string) => void
+  simLoading: boolean
+  simUseCustom: boolean
+  onSimUseCustomChange: (v: boolean) => void
+  onSimSend: () => void
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  leadDetail: any | null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onLeadDetail: (l: any | null) => void
+  onExportLeads: () => void
+}) {
+  const [dragOver, setDragOver] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const simBottomRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    simBottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [simMsgs, simLoading])
+
+  const SUB_TABS: { key: typeof subTab; label: string }[] = [
+    { key: 'documents',  label: 'Documentos' },
+    { key: 'prompt',     label: 'Prompt del sistema' },
+    { key: 'simulator',  label: 'Simulador' },
+    { key: 'leads',      label: 'Leads' },
+  ]
+
+  return (
+    <div className="space-y-6">
+      {/* Delete document confirmation modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
+            <div className="flex items-start gap-3">
+              <span className="text-2xl">⚠️</span>
+              <div>
+                <p className="font-bold text-slate-900">Eliminar documento</p>
+                <p className="text-sm text-slate-500 mt-1">
+                  Eliminar este documento reducirá la información disponible para el chatbot.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => onDeleteTarget(null)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50">
+                Cancelar
+              </button>
+              <button onClick={() => onDeleteConfirm(deleteTarget)}
+                className="flex-1 py-2.5 rounded-xl bg-red-600 text-sm font-semibold text-white hover:bg-red-700">
+                Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lead detail modal */}
+      {leadDetail && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => onLeadDetail(null)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h2 className="font-bold text-slate-900">Conversación — {leadDetail.name}</h2>
+              <button onClick={() => onLeadDetail(null)} className="text-slate-400 hover:text-slate-600 text-xl">×</button>
+            </div>
+            <div className="space-y-3 max-h-80 overflow-y-auto">
+              {(leadDetail.conversation ?? []).map((m: {role:string;content:string}, i: number) => (
+                <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[80%] rounded-xl px-3 py-2 text-sm ${
+                    m.role === 'user' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-800'
+                  }`}>
+                    {m.content}
+                  </div>
+                </div>
+              ))}
+              {(!leadDetail.conversation || leadDetail.conversation.length === 0) && (
+                <p className="text-sm text-slate-400 text-center py-4">Sin conversación guardada.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sub-tab bar */}
+      <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
+        {SUB_TABS.map((t) => (
+          <button key={t.key} onClick={() => onSubTabChange(t.key)}
+            className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${
+              subTab === t.key ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+            }`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── TAB: Documentos ── */}
+      {subTab === 'documents' && (
+        <div className="space-y-6">
+          {/* Upload zone */}
+          <div
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => { e.preventDefault(); setDragOver(false); onUpload(e.dataTransfer.files) }}
+            onClick={() => fileInputRef.current?.click()}
+            className={`border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-colors ${
+              dragOver ? 'border-blue-400 bg-blue-50' : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+            }`}
+          >
+            <input ref={fileInputRef} type="file" multiple accept=".pdf,.docx,.txt"
+              className="hidden" onChange={(e) => onUpload(e.target.files)} />
+            {uploading ? (
+              <div className="flex flex-col items-center gap-2">
+                <div className="w-8 h-8 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin" />
+                <p className="text-sm text-slate-500">Subiendo...</p>
+              </div>
+            ) : (
+              <>
+                <p className="text-3xl mb-2">📄</p>
+                <p className="text-sm font-semibold text-slate-700">Arrastra archivos aquí o haz clic para seleccionar</p>
+                <p className="text-xs text-slate-400 mt-1">PDF, DOCX, TXT · máx. 10 MB por archivo</p>
+              </>
+            )}
+          </div>
+
+          {/* Document list */}
+          {documents.length === 0 ? (
+            <p className="text-center text-sm text-slate-400 py-6">No hay documentos subidos aún.</p>
+          ) : (
+            <div className="divide-y divide-slate-100 border border-slate-200 rounded-2xl overflow-hidden">
+              {documents.map((doc: {id:string;name:string;file_name:string;file_size:string;chunk_count:number;status:string;created_at:string;file_url:string}) => (
+                <div key={doc.id} className="flex items-center justify-between gap-4 px-5 py-4 bg-white hover:bg-slate-50 transition-colors">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <span className="text-xl shrink-0 mt-0.5">📄</span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-900 truncate">{doc.file_name}</p>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {doc.file_size && `${doc.file_size} · `}
+                        {doc.status === 'ready' && `${doc.chunk_count} chunks · `}
+                        {doc.status === 'processing' && <span className="text-amber-500">⏳ Procesando... · </span>}
+                        {doc.status === 'ready' && <span className="text-emerald-600">✅ Listo · </span>}
+                        {doc.status === 'error' && <span className="text-red-500">❌ Error · </span>}
+                        Subido el {new Date(doc.created_at).toLocaleDateString('es-CO', { day:'2-digit', month:'short', year:'numeric' })}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {doc.status === 'error' && (
+                      <button
+                        onClick={() => {
+                          supabase.functions.invoke('process-document', { body: { document_id: doc.id } }).catch(() => {})
+                          supabase.from('chat_documents').update({ status: 'processing' }).eq('id', doc.id)
+                        }}
+                        className="text-xs px-3 py-1.5 rounded-lg border border-blue-200 text-blue-600 bg-white hover:bg-blue-50 transition-colors"
+                      >
+                        Reintentar
+                      </button>
+                    )}
+                    <button onClick={() => onDeleteTarget(doc.id)}
+                      className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-600 bg-white hover:bg-red-50 transition-colors">
+                      🗑️ Eliminar
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── TAB: Prompt ── */}
+      {subTab === 'prompt' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-bold text-slate-700">Prompt del sistema</label>
+            <span className="text-xs text-slate-400">{promptText.length} caracteres</span>
+          </div>
+          <textarea
+            value={promptText}
+            onChange={(e) => onPromptTextChange(e.target.value)}
+            rows={14}
+            className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none"
+          />
+          <div className="text-xs text-slate-400 bg-slate-50 rounded-xl p-3">
+            <p className="font-semibold text-slate-600 mb-1">Variables inyectadas automáticamente:</p>
+            <p>• Contenido de los documentos activos (top 5 fragmentos por relevancia)</p>
+            <p>• Historial de conversación (últimos 10 mensajes)</p>
+          </div>
+          <div className="flex gap-3">
+            <button onClick={onSavePrompt} disabled={promptSaving}
+              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-colors">
+              {promptSaving ? 'Guardando...' : '💾 Guardar prompt'}
+            </button>
+            <button onClick={onResetPrompt}
+              className="px-5 py-2.5 border border-slate-200 text-slate-600 text-sm font-semibold rounded-xl hover:bg-slate-50 transition-colors">
+              Restaurar por defecto
+            </button>
+            <button onClick={() => onSubTabChange('simulator')}
+              className="px-5 py-2.5 border border-blue-200 text-blue-600 text-sm font-semibold rounded-xl hover:bg-blue-50 transition-colors ml-auto">
+              🧪 Probar en simulador →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB: Simulador ── */}
+      {subTab === 'simulator' && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl text-xs text-slate-500">
+            <span>Este simulador usa los documentos activos.</span>
+            <label className="flex items-center gap-1.5 ml-auto cursor-pointer select-none">
+              <input type="checkbox" checked={simUseCustom} onChange={(e) => onSimUseCustomChange(e.target.checked)}
+                className="w-3.5 h-3.5 accent-blue-600" />
+              <span className="font-semibold text-slate-700">Usar prompt sin guardar</span>
+            </label>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-6">
+            {/* Left: prompt preview */}
+            <div className="space-y-2">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+                Prompt {simUseCustom ? '(sin guardar)' : '(guardado)'}
+              </p>
+              <pre className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-xl p-4 whitespace-pre-wrap leading-relaxed max-h-80 overflow-y-auto">
+                {promptText || '(sin prompt)'}
+              </pre>
+            </div>
+
+            {/* Right: mini chat */}
+            <div className="flex flex-col border border-slate-200 rounded-2xl overflow-hidden" style={{ height: '380px' }}>
+              <div className="px-4 py-2.5 shrink-0"
+                style={{ background: 'linear-gradient(135deg, #1e3a5f, #16a34a)' }}>
+                <p className="text-white text-sm font-semibold">Simulador de chat</p>
+              </div>
+              <div className="flex-1 overflow-y-auto p-3 space-y-2" style={{ backgroundColor: '#f8fafc' }}>
+                {simMsgs.length === 0 && (
+                  <p className="text-xs text-slate-400 text-center pt-6">Envía un mensaje para empezar la simulación.</p>
+                )}
+                {simMsgs.map((m) => (
+                  <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-xs leading-relaxed ${
+                      m.role === 'user' ? 'bg-blue-600 text-white rounded-br-sm' : 'bg-white text-slate-800 shadow-sm rounded-bl-sm'
+                    }`}>
+                      {m.content}
+                    </div>
+                  </div>
+                ))}
+                {simLoading && (
+                  <div className="flex justify-start">
+                    <div className="bg-white rounded-xl px-3 py-2 shadow-sm">
+                      <div className="flex gap-1">
+                        {[0,150,300].map((d) => (
+                          <span key={d} className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: `${d}ms` }} />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <div ref={simBottomRef} />
+              </div>
+              <div className="flex gap-2 p-2 border-t border-slate-100 bg-white shrink-0">
+                <input value={simInput} onChange={(e) => onSimInputChange(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSimSend() } }}
+                  placeholder="Escribe un mensaje..." disabled={simLoading}
+                  className="flex-1 border border-slate-200 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-50" />
+                <button onClick={onSimSend} disabled={!simInput.trim() || simLoading}
+                  className="w-8 h-8 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white rounded-xl flex items-center justify-center shrink-0">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB: Leads ── */}
+      {subTab === 'leads' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-slate-700">{leads.length} lead{leads.length !== 1 ? 's' : ''} capturados</p>
+            <button onClick={onExportLeads}
+              className="text-xs px-4 py-2 border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 transition-colors font-semibold">
+              Exportar CSV
+            </button>
+          </div>
+
+          {leads.length === 0 ? (
+            <p className="text-center text-sm text-slate-400 py-8">No hay leads aún.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100">
+                    {['Nombre', 'Email', 'Teléfono', 'Fecha', 'Conversación'].map((h) => (
+                      <th key={h} className="text-left py-3 pr-4 text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {leads.map((lead: {id:string;name:string;email:string;phone:string|null;created_at:string;conversation:unknown}) => (
+                    <tr key={lead.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                      <td className="py-3.5 pr-4 font-semibold text-slate-900">{lead.name}</td>
+                      <td className="py-3.5 pr-4 text-slate-600">{lead.email}</td>
+                      <td className="py-3.5 pr-4 text-slate-500">{lead.phone ?? '—'}</td>
+                      <td className="py-3.5 pr-4 text-slate-500 whitespace-nowrap">
+                        {new Date(lead.created_at).toLocaleDateString('es-CO', { day:'2-digit', month:'short', year:'numeric' })}
+                      </td>
+                      <td className="py-3.5">
+                        <button onClick={() => onLeadDetail(lead)}
+                          className="text-xs px-3 py-1.5 border border-blue-200 text-blue-600 rounded-lg hover:bg-blue-50 transition-colors">
+                          Ver conversación
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
