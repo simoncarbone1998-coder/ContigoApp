@@ -9,11 +9,8 @@ import AplicarPage from './pages/AplicarPage'
 // Patient pages
 import PatientMiSaludPage   from './pages/paciente/MiSaludPage'
 import PatientPerfilPage    from './pages/paciente/PerfilPage'
-import PatientAgendarPage   from './pages/paciente/AgendarPage'
-import PatientCalendarioPage from './pages/paciente/CalendarioPage'
 import PatientPastillasPage  from './pages/paciente/PastillasPage'
 import PatientExamenesPage   from './pages/paciente/ExamenesPage'
-import PatientReferenciasPage from './pages/paciente/ReferenciasPage'
 import PatientPendingApplicationPage from './pages/paciente/PendingApplicationPage'
 import PatientRejectedApplicationPage from './pages/paciente/RejectedApplicationPage'
 

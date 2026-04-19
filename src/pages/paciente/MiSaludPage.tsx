@@ -145,7 +145,6 @@ export default function MiSaludPage() {
   const [reschedulingAppt, setReschedulingAppt] = useState<Appointment | null>(null)
   const [rscSlots,         setRscSlots]         = useState<AvailabilitySlot[]>([])
   const [rscLoading,       setRscLoading]       = useState(false)
-  const [rscDate,          setRscDate]          = useState<string | null>(null)
   const [rscSlot,          setRscSlot]          = useState<AvailabilitySlot | null>(null)
   const [rscStep,          setRscStep]          = useState<'picker' | 'confirming'>('picker')
   const [rscSaving,        setRscSaving]        = useState(false)
