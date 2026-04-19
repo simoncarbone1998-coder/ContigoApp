@@ -5,12 +5,10 @@ import type { Role } from '../lib/types'
 
 const roleLinks: Record<Role, { to: string; label: string }[]> = {
   patient: [
-    { to: '/paciente/perfil',     label: 'Mi Perfil' },
-    { to: '/paciente/agendar',    label: 'Agendar Cita' },
-    { to: '/paciente/calendario', label: 'Calendario' },
-    { to: '/paciente/pastillas',  label: 'Pastillas' },
-    { to: '/paciente/examenes',   label: 'Exámenes' },
-    { to: '/paciente/referencias', label: 'Referencias' },
+    { to: '/paciente/mi-salud',  label: 'Mi Salud' },
+    { to: '/paciente/pastillas', label: 'Pastillas' },
+    { to: '/paciente/examenes',  label: 'Exámenes' },
+    { to: '/paciente/perfil',    label: 'Perfil' },
   ],
   doctor: [
     { to: '/doctor/perfil',    label: 'Mi Perfil' },
@@ -51,7 +49,7 @@ export default function NavBar() {
 
   const links = roleLinks[profile.role]
   const initials = getInitials(profile.full_name, profile.email)
-  const profileLink = links[0].to  // Mi Perfil is always first for patient and doctor
+  const profileLink = profile.role === 'patient' ? '/paciente/perfil' : links[0].to
 
   async function handleSignOut() {
     await signOut()
@@ -63,7 +61,7 @@ export default function NavBar() {
       <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
 
         {/* Brand */}
-        <Link to={links[0].to} className="flex items-center gap-2 shrink-0">
+        <Link to={profile.role === 'patient' ? '/paciente/mi-salud' : links[0].to} className="flex items-center gap-2 shrink-0">
           <img src="/logo.png" alt="Contigo" className="h-10 w-auto" />
         </Link>
 

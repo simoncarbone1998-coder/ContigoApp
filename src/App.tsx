@@ -7,6 +7,7 @@ import RegistroPage from './pages/RegistroPage'
 import AplicarPage from './pages/AplicarPage'
 
 // Patient pages
+import PatientMiSaludPage   from './pages/paciente/MiSaludPage'
 import PatientPerfilPage    from './pages/paciente/PerfilPage'
 import PatientAgendarPage   from './pages/paciente/AgendarPage'
 import PatientCalendarioPage from './pages/paciente/CalendarioPage'
@@ -58,15 +59,16 @@ export default function App() {
         <Route path="/paciente/pending-application" element={<PatientPendingApplicationPage />} />
         <Route path="/paciente/rejected"            element={<PatientRejectedApplicationPage />} />
         <Route path="/paciente/onboarding"  element={<PatientOnboarding />} />
+        <Route path="/paciente/mi-salud"    element={<PatientMiSaludPage />} />
         <Route path="/paciente/perfil"      element={<PatientPerfilPage />} />
-        <Route path="/paciente/agendar"     element={<PatientAgendarPage />} />
-        <Route path="/paciente/calendario"  element={<PatientCalendarioPage />} />
         <Route path="/paciente/pastillas"   element={<PatientPastillasPage />} />
         <Route path="/paciente/examenes"    element={<PatientExamenesPage />} />
-        <Route path="/paciente/referencias" element={<PatientReferenciasPage />} />
-        {/* Legacy redirect */}
-        <Route path="/paciente/dashboard"   element={<Navigate to="/paciente/perfil" replace />} />
-        <Route path="/paciente/nueva-cita"  element={<Navigate to="/paciente/agendar" replace />} />
+        {/* Legacy redirects */}
+        <Route path="/paciente/dashboard"   element={<Navigate to="/paciente/mi-salud" replace />} />
+        <Route path="/paciente/agendar"     element={<Navigate to="/paciente/mi-salud" replace />} />
+        <Route path="/paciente/calendario"  element={<Navigate to="/paciente/mi-salud" replace />} />
+        <Route path="/paciente/referencias" element={<Navigate to="/paciente/mi-salud" replace />} />
+        <Route path="/paciente/nueva-cita"  element={<Navigate to="/paciente/mi-salud" replace />} />
       </Route>
 
       {/* Doctor routes */}
