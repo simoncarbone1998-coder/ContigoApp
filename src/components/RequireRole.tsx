@@ -6,7 +6,7 @@ import type { Role } from '../lib/types'
 const roleHome: Record<Role, string> = {
   patient:    '/paciente/mi-salud',
   doctor:     '/doctor/agenda',
-  admin:      '/admin/dashboard',
+  admin:      '/admin/aprobaciones/pacientes',
   laboratory: '/lab/dashboard',
 }
 

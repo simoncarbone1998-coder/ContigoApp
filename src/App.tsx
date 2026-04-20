@@ -22,7 +22,15 @@ import DoctorAgendaPage  from './pages/doctor/AgendaPage'
 import DoctorFinanzasPage from './pages/doctor/FinanzasPage'
 
 // Admin pages
-import AdminDashboard from './pages/admin/DashboardPage'
+import AdminLayout                  from './pages/admin/AdminLayout'
+import AprobacionesPacientesPage    from './pages/admin/AprobacionesPacientesPage'
+import AprobacionesMedicosPage      from './pages/admin/AprobacionesMedicosPage'
+import MetricasPage                 from './pages/admin/MetricasPage'
+import UsuariosPage                 from './pages/admin/UsuariosPage'
+import CitasPage                    from './pages/admin/CitasPage'
+import CalificacionesPage           from './pages/admin/CalificacionesPage'
+import UnderwritingPage             from './pages/admin/UnderwritingPage'
+import ChatIAPage                   from './pages/admin/ChatIAPage'
 
 // Lab portal pages
 import RequireLab         from './components/RequireLab'
@@ -82,7 +90,19 @@ export default function App() {
 
       {/* Admin routes */}
       <Route element={<RequireRole role="admin" />}>
-        <Route path="/admin/dashboard" element={<AdminDashboard />} />
+        <Route element={<AdminLayout />}>
+          <Route path="/admin/aprobaciones/pacientes" element={<AprobacionesPacientesPage />} />
+          <Route path="/admin/aprobaciones/medicos"   element={<AprobacionesMedicosPage />} />
+          <Route path="/admin/data/metricas"          element={<MetricasPage />} />
+          <Route path="/admin/data/usuarios"          element={<UsuariosPage />} />
+          <Route path="/admin/data/citas"             element={<CitasPage />} />
+          <Route path="/admin/data/calificaciones"    element={<CalificacionesPage />} />
+          <Route path="/admin/bots/underwriting"      element={<UnderwritingPage />} />
+          <Route path="/admin/bots/chat"              element={<ChatIAPage />} />
+        </Route>
+        {/* Legacy redirect */}
+        <Route path="/admin/dashboard" element={<Navigate to="/admin/aprobaciones/pacientes" replace />} />
+        <Route path="/admin" element={<Navigate to="/admin/aprobaciones/pacientes" replace />} />
       </Route>
 
       {/* Lab portal — public */}

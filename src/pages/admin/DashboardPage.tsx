@@ -1280,7 +1280,7 @@ const CONDITIONS_LIST = [
 
 // ── Applications Section ─────────────────────────────────────────────────────
 
-function ApplicationsSection({
+export function ApplicationsSection({
   applications, questionnaires, processingId, expandedQuestions, onToggleQuestions,
   historyFilter, onHistoryFilterChange, historySearch, onHistorySearchChange,
   onApprove, onReject,
@@ -1407,7 +1407,7 @@ function ApplicationsSection({
   )
 }
 
-function ApplicationCard({
+export function ApplicationCard({
   app, questionnaire, processingId, expanded, onToggleExpand, onApprove, onReject
 }: {
   app: PatientApplication
@@ -1572,7 +1572,7 @@ function ApplicationCard({
 // ── Underwriting Section ─────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function UnderwritingSection(props: any) {
+export function UnderwritingSection(props: any) {
   const {
     rulebooks, uwTab, onUwTabChange,
     rbCostConsult, onRbCostConsultChange,
@@ -1907,7 +1907,7 @@ function UnderwritingSection(props: any) {
   )
 }
 
-function RulebookCompare({ active, other, onClose }: { active: UnderwritingRulebook; other: UnderwritingRulebook; onClose: () => void }) {
+export function RulebookCompare({ active, other, onClose }: { active: UnderwritingRulebook; other: UnderwritingRulebook; onClose: () => void }) {
   if (!active || !other) return null
   const fields: { label: string; key: keyof UnderwritingRulebook }[] = [
     { label: 'Costo consulta', key: 'cost_per_consultation_usd' },
@@ -1952,7 +1952,7 @@ function RulebookCompare({ active, other, onClose }: { active: UnderwritingRuleb
   )
 }
 
-function UsersSection({
+export function UsersSection({
   users, search, onSearchChange, roleFilter, onRoleFilterChange,
   currentAdminId, roleChanging, onRoleChange, onDetail, ratingMap,
 }: {
@@ -2114,7 +2114,7 @@ const LAB_STATUS_LABELS: Record<string, string> = {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function LabsSection({ labs, processingId, onApprove, onReject, onDetail }: {
+export function LabsSection({ labs, processingId, onApprove, onReject, onDetail }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   labs: any[]
   processingId: string | null
@@ -2231,7 +2231,7 @@ function LabsSection({ labs, processingId, onApprove, onReject, onDetail }: {
   )
 }
 
-function StarsDisplay({ rating }: { rating: number }) {
+export function StarsDisplay({ rating }: { rating: number }) {
   return (
     <span className="text-sm leading-none">
       {[1, 2, 3, 4, 5].map((s) => (
@@ -2242,7 +2242,7 @@ function StarsDisplay({ rating }: { rating: number }) {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function RatingsSection({ feedbacks, avgRating }: { feedbacks: any[]; avgRating: number }) {
+export function RatingsSection({ feedbacks, avgRating }: { feedbacks: any[]; avgRating: number }) {
   return (
     <div className="space-y-6">
       {/* Summary cards */}
@@ -2313,7 +2313,7 @@ function RatingsSection({ feedbacks, avgRating }: { feedbacks: any[]; avgRating:
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function ExamsSection({ orders }: { orders: any[] }) {
+export function ExamsSection({ orders }: { orders: any[] }) {
   const pending   = orders.filter((o) => o.status === 'pending').length
   const scheduled = orders.filter((o) => o.status === 'scheduled').length
   const completed = orders.filter((o) => o.status === 'completed').length
@@ -2382,7 +2382,7 @@ function ExamsSection({ orders }: { orders: any[] }) {
   )
 }
 
-function AppointmentsTable({
+export function AppointmentsTable({
   appointments, cancelling, onCancel,
 }: { appointments: Appointment[]; cancelling: string | null; onCancel: (id: string) => void }) {
   if (appointments.length === 0) {
@@ -2448,7 +2448,7 @@ function AppointmentsTable({
 
 // ── ChatIASection ─────────────────────────────────────────────────────────────
 
-function ChatIASection({
+export function ChatIASection({
   documents, leads, subTab, onSubTabChange,
   onUpload, uploading, deleteTarget, onDeleteTarget, onDeleteConfirm,
   promptText, onPromptTextChange, promptSaving, onSavePrompt, onResetPrompt,
