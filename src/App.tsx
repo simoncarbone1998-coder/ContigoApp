@@ -25,6 +25,7 @@ import DoctorFinanzasPage from './pages/doctor/FinanzasPage'
 import AdminLayout                  from './pages/admin/AdminLayout'
 import AprobacionesPacientesPage    from './pages/admin/AprobacionesPacientesPage'
 import AprobacionesMedicosPage      from './pages/admin/AprobacionesMedicosPage'
+import AprobacionesLaboratoriosPage from './pages/admin/AprobacionesLaboratoriosPage'
 import MetricasPage                 from './pages/admin/MetricasPage'
 import UsuariosPage                 from './pages/admin/UsuariosPage'
 import CitasPage                    from './pages/admin/CitasPage'
@@ -92,7 +93,8 @@ export default function App() {
       <Route element={<RequireRole role="admin" />}>
         <Route element={<AdminLayout />}>
           <Route path="/admin/aprobaciones/pacientes" element={<AprobacionesPacientesPage />} />
-          <Route path="/admin/aprobaciones/medicos"   element={<AprobacionesMedicosPage />} />
+          <Route path="/admin/aprobaciones/medicos"      element={<AprobacionesMedicosPage />} />
+          <Route path="/admin/aprobaciones/laboratorios" element={<AprobacionesLaboratoriosPage />} />
           <Route path="/admin/data/metricas"          element={<MetricasPage />} />
           <Route path="/admin/data/usuarios"          element={<UsuariosPage />} />
           <Route path="/admin/data/citas"             element={<CitasPage />} />

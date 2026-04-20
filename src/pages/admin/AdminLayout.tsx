@@ -33,15 +33,15 @@ function SidebarLink({ to, label, badge }: { to: string; label: string; badge?: 
     <NavLink
       to={to}
       className={({ isActive }) =>
-        `flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-          isActive ? 'text-white' : 'text-white/70 hover:text-white hover:bg-white/10'
+        `flex items-center justify-between px-3 py-2 text-sm font-medium transition-colors ${
+          isActive ? 'text-white' : 'text-white/65 hover:text-white hover:bg-white/10'
         }`
       }
-      style={({ isActive }) => isActive ? { backgroundColor: 'rgba(255,255,255,0.15)' } : {}}
+      style={({ isActive }) => isActive ? { backgroundColor: 'rgba(255,255,255,0.20)', borderRadius: '6px' } : { borderRadius: '6px' }}
     >
       {label}
       {badge !== undefined && badge > 0 && (
-        <span className="ml-auto bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">
+        <span className="ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none" style={{ background: 'white', color: '#1e3a5f' }}>
           {badge}
         </span>
       )}
@@ -58,33 +58,44 @@ function SidebarSection({ label, children }: { label: string; children: React.Re
   )
 }
 
-function Sidebar({ pendingPatients, pendingDoctors, email, onSignOut, mobileOpen, onMobileClose }: {
-  pendingPatients: number; pendingDoctors: number; email: string | null
+function LogoBrand() {
+  const [imgFailed, setImgFailed] = useState(false)
+  return (
+    <div className="flex items-center gap-3">
+      {!imgFailed ? (
+        <img src="/logo.png" alt="Contigo" className="h-9 w-auto brightness-0 invert" onError={() => setImgFailed(true)} />
+      ) : (
+        <span className="text-white font-bold text-xl leading-none">contigo</span>
+      )}
+      <p className="text-white/60 text-[10px] leading-tight">Panel de administración</p>
+    </div>
+  )
+}
+
+function Sidebar({ pendingPatients, pendingDoctors, pendingLabs, email, onSignOut, mobileOpen, onMobileClose }: {
+  pendingPatients: number; pendingDoctors: number; pendingLabs: number; email: string | null
   onSignOut: () => void; mobileOpen: boolean; onMobileClose: () => void
 }) {
+  const sidebarStyle = { background: 'linear-gradient(to bottom, #1e3a5f, #16a34a)' }
+
   const inner = (
-    <div className="flex flex-col h-full" style={{ background: '#1e3a5f' }}>
+    <div className="flex flex-col h-full" style={sidebarStyle}>
       {/* Brand */}
       <div className="px-5 pt-6 pb-4 border-b border-white/10">
-        <div className="flex items-center gap-3">
-          <img src="/logo.png" alt="Contigo" className="h-8 w-auto brightness-0 invert" onError={(e) => (e.currentTarget.style.display = 'none')} />
-          <div>
-            <p className="text-white font-bold text-base leading-tight">contigo</p>
-            <p className="text-white/50 text-[10px] leading-tight">Panel de administración</p>
-          </div>
-        </div>
+        <LogoBrand />
       </div>
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-3 space-y-0 overflow-y-auto">
         <SidebarSection label="Aprobaciones">
-          <SidebarLink to="/admin/aprobaciones/pacientes" label="Pacientes" badge={pendingPatients} />
-          <SidebarLink to="/admin/aprobaciones/medicos"   label="Médicos"   badge={pendingDoctors} />
+          <SidebarLink to="/admin/aprobaciones/pacientes"    label="Pacientes"          badge={pendingPatients} />
+          <SidebarLink to="/admin/aprobaciones/medicos"      label="Médicos"            badge={pendingDoctors} />
+          <SidebarLink to="/admin/aprobaciones/laboratorios" label="Centros Diagnóstico" badge={pendingLabs} />
         </SidebarSection>
         <SidebarSection label="Company Data">
-          <SidebarLink to="/admin/data/metricas"      label="Métricas" />
-          <SidebarLink to="/admin/data/usuarios"      label="Usuarios" />
-          <SidebarLink to="/admin/data/citas"         label="Citas" />
+          <SidebarLink to="/admin/data/metricas"       label="Métricas" />
+          <SidebarLink to="/admin/data/usuarios"       label="Usuarios" />
+          <SidebarLink to="/admin/data/citas"          label="Citas" />
           <SidebarLink to="/admin/data/calificaciones" label="Calificaciones" />
         </SidebarSection>
         <SidebarSection label="AI Bots">
@@ -95,9 +106,8 @@ function Sidebar({ pendingPatients, pendingDoctors, email, onSignOut, mobileOpen
 
       {/* Footer */}
       <div className="px-5 py-4 border-t border-white/10">
-        <p className="text-white/50 text-xs truncate mb-2">{email ?? '—'}</p>
-        <button onClick={onSignOut}
-          className="text-white/60 hover:text-white text-xs font-medium transition-colors">
+        <p className="text-white/60 text-xs truncate mb-2">{email ?? '—'}</p>
+        <button onClick={onSignOut} className="text-white/60 hover:text-white text-xs font-medium transition-colors">
           Cerrar sesión →
         </button>
       </div>
@@ -563,6 +573,7 @@ export default function AdminLayout() {
 
   const pendingPatientCount = applications.filter((a) => a.status === 'pending').length
   const pendingDoctorCount  = pendingDoctors.length
+  const pendingLabCount     = (allLabs as { status: string }[]).filter((l) => l.status === 'pending').length
 
   async function handleSignOut() { await signOut(); navigate('/login', { replace: true }) }
 
@@ -610,6 +621,7 @@ export default function AdminLayout() {
         <Sidebar
           pendingPatients={pendingPatientCount}
           pendingDoctors={pendingDoctorCount}
+          pendingLabs={pendingLabCount}
           email={adminProfile.email}
           onSignOut={handleSignOut}
           mobileOpen={mobileOpen}
@@ -626,9 +638,9 @@ export default function AdminLayout() {
               </svg>
             </button>
             <span className="font-semibold text-slate-800 text-sm">Panel de administración</span>
-            {(pendingPatientCount + pendingDoctorCount) > 0 && (
+            {(pendingPatientCount + pendingDoctorCount + pendingLabCount) > 0 && (
               <span className="ml-auto bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
-                {pendingPatientCount + pendingDoctorCount}
+                {pendingPatientCount + pendingDoctorCount + pendingLabCount}
               </span>
             )}
           </div>

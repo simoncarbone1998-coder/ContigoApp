@@ -1,5 +1,4 @@
 import { useAdminCtx } from './AdminContext'
-import { LabsSection } from './DashboardPage'
 import { specialtyLabel } from '../../lib/types'
 
 function initials(name: string | null, email: string | null) {
@@ -10,28 +9,30 @@ function initials(name: string | null, email: string | null) {
 export default function AprobacionesMedicosPage() {
   const {
     pendingDoctors, processingId, handleApprove, setRejectTarget, setRejectReason,
-    allLabs, labProcessingId, handleLabApprove, setLabRejectTarget, setLabRejectReason, setLabDetail,
   } = useAdminCtx()
 
   return (
     <div className="space-y-6 max-w-5xl">
       <div>
-        <h1 className="text-xl font-bold text-slate-900">Aprobaciones — Médicos y Laboratorios</h1>
-        <p className="text-sm text-slate-500 mt-1">Gestiona las solicitudes de médicos y centros aliados.</p>
+        <h1 className="text-xl font-bold text-slate-900">Médicos</h1>
+        <p className="text-sm text-slate-500 mt-1">
+          {pendingDoctors.length > 0
+            ? `${pendingDoctors.length} médico${pendingDoctors.length !== 1 ? 's' : ''} esperan aprobación`
+            : 'No hay solicitudes pendientes'}
+        </p>
       </div>
 
-      {/* Pending doctors */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="flex items-center gap-2 px-6 py-4 border-b border-slate-100 bg-amber-50">
           <span className="text-lg">⏳</span>
-          <h2 className="text-base font-bold text-slate-900">Médicos pendientes de aprobación</h2>
+          <h2 className="text-base font-bold text-slate-900">Pendientes de aprobación</h2>
           {pendingDoctors.length > 0 && (
             <span className="bg-amber-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">{pendingDoctors.length}</span>
           )}
         </div>
         {pendingDoctors.length === 0 ? (
-          <div className="flex flex-col items-center py-12 text-slate-400">
-            <span className="text-3xl mb-2">✅</span>
+          <div className="flex flex-col items-center py-16 text-slate-400">
+            <span className="text-4xl mb-3">✅</span>
             <p className="text-sm font-medium">No hay médicos pendientes</p>
           </div>
         ) : (
@@ -66,30 +67,6 @@ export default function AprobacionesMedicosPage() {
             ))}
           </div>
         )}
-      </div>
-
-      {/* Labs */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="flex items-center gap-2 px-6 py-4 border-b border-slate-100">
-          <span className="text-lg">🔬</span>
-          <h2 className="text-base font-bold text-slate-900">Centros aliados</h2>
-        </div>
-        <div className="p-6">
-          {allLabs.length === 0 ? (
-            <div className="flex flex-col items-center py-12 text-slate-400">
-              <span className="text-3xl mb-2">🔬</span>
-              <p className="text-sm font-medium">No hay laboratorios registrados aún.</p>
-            </div>
-          ) : (
-            <LabsSection
-              labs={allLabs}
-              processingId={labProcessingId}
-              onApprove={handleLabApprove}
-              onReject={(lab) => { setLabRejectTarget(lab); setLabRejectReason('') }}
-              onDetail={setLabDetail}
-            />
-          )}
-        </div>
       </div>
     </div>
   )
