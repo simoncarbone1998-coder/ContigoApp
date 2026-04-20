@@ -29,8 +29,14 @@ interface Questionnaire {
   medications_detail?: string
   smoking_status?: string
   has_eps?: boolean
-  // Simulator shortcut: age instead of date_of_birth
   age?: number
+}
+
+interface PatientData {
+  full_name?: string
+  phone?: string
+  city?: string
+  delivery_address?: string
 }
 
 function calcAge(dob: string | undefined, age: number | undefined): number | null {
@@ -52,13 +58,16 @@ Deno.serve(async (req) => {
       questionnaire: Questionnaire
       rulebook_id?: string
       simulate?: boolean
+      // Registration flow: pass these to have the function write all rows via service role
+      patient_id?: string
+      patient_data?: PatientData
     }
 
-    const { questionnaire, rulebook_id, simulate } = body
+    const { questionnaire, rulebook_id, simulate, patient_id, patient_data } = body
 
-    // ── Fetch rulebook ──────────────────────────────────────────────────────
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
+    // ── Fetch rulebook ──────────────────────────────────────────────────────
     let rulebookQuery = supabase.from('underwriting_rulebooks').select('*')
     if (rulebook_id) {
       rulebookQuery = rulebookQuery.eq('id', rulebook_id)
@@ -180,18 +189,70 @@ Responde ÚNICAMENTE con este JSON válido (sin texto adicional, sin markdown, s
     try {
       aiResult = JSON.parse(raw)
     } catch {
-      // Try to extract JSON if wrapped in markdown
       const match = raw.match(/\{[\s\S]*\}/)
       if (!match) throw new Error('Claude did not return valid JSON')
       aiResult = JSON.parse(match[0])
     }
 
+    // ── Write registration rows via service role (bypasses RLS) ────────────
+    // Only runs during the real registration flow (not simulator calls).
+    if (patient_id && !simulate) {
+      // Update profile with full fields (trigger only creates minimal row)
+      if (patient_data) {
+        await supabase.from('profiles').update({
+          full_name:        patient_data.full_name        ?? undefined,
+          phone:            patient_data.phone            ?? undefined,
+          city:             patient_data.city             ?? undefined,
+          delivery_address: patient_data.delivery_address ?? undefined,
+          application_status: 'pending',
+          applied_at:       new Date().toISOString(),
+          onboarding_completed: false,
+        }).eq('id', patient_id)
+      }
+
+      // Upsert health questionnaire
+      await supabase.from('health_questionnaire').upsert({
+        patient_id,
+        date_of_birth:          questionnaire.date_of_birth          ?? null,
+        biological_sex:         questionnaire.biological_sex         ?? null,
+        conditions:             (questionnaire.conditions ?? []).filter((c: string) => c !== 'Ninguna de las anteriores'),
+        hospitalized_last_12m:  questionnaire.hospitalized_last_12m  ?? false,
+        hospitalization_reason: questionnaire.hospitalization_reason ?? null,
+        active_treatment:       questionnaire.active_treatment       ?? false,
+        regular_medications:    questionnaire.regular_medications    ?? false,
+        medications_detail:     questionnaire.medications_detail     ?? null,
+        smoking_status:         questionnaire.smoking_status         ?? null,
+        has_eps:                questionnaire.has_eps                ?? false,
+      }, { onConflict: 'patient_id' })
+
+      // Insert patient_applications row
+      const { error: appErr } = await supabase.from('patient_applications').insert({
+        patient_id,
+        status:               'pending',
+        ai_recommendation:    (aiResult.recommendation as string)    ?? null,
+        ai_score:             aiResult.probability_high_cost != null
+                                ? Math.round((aiResult.probability_high_cost as number) * 100)
+                                : null,
+        ai_cost_expected_usd: (aiResult.cost_breakdown as Record<string, number> | undefined)?.total_expected_cost_usd ?? null,
+        ai_income_usd:        (aiResult.income_quarter_usd as number) ?? incomeQuarter,
+        ai_ratio:             (aiResult.ratio as number)              ?? null,
+        ai_drivers:           aiResult.drivers                       ?? null,
+        ai_reasoning:         (aiResult.reasoning as string)         ?? null,
+        ai_sensitivity:       aiResult.sensitivity_analysis          ?? null,
+        rulebook_version_id:  rb.id,
+      })
+
+      if (appErr) {
+        console.error('patient_applications insert error:', appErr)
+      }
+    }
+
     return json({
       ...aiResult,
       rulebook: {
-        id: rb.id,
+        id:      rb.id,
         version: rb.version,
-        name: rb.name,
+        name:    rb.name,
       },
       simulate: simulate ?? false,
     })

@@ -194,70 +194,40 @@ export default function AplicarPage() {
 
       const userId = signUpData.user.id
 
-      // 2. Create profile
-      await supabase.from('profiles').upsert({
-        id: userId,
-        full_name: fullName.trim(),
-        email,
-        phone: phone.trim() || null,
-        city: city.trim() || null,
-        delivery_address: address.trim() || null,
-        role: 'patient',
-        application_status: 'pending',
-        applied_at: new Date().toISOString(),
-        onboarding_completed: false,
-      }, { onConflict: 'id' })
-
-      // 3. Create health questionnaire — use service-role-equivalent via RLS bypass
-      // We insert while still signed-in (session exists from signUp)
-      await supabase.from('health_questionnaire').insert({
-        patient_id: userId,
-        date_of_birth: dob || null,
-        biological_sex: sex || null,
-        conditions: conditions.filter((c) => c !== 'Ninguna de las anteriores'),
-        hospitalized_last_12m: hospitalized ?? false,
-        hospitalization_reason: hospitalReason.trim() || null,
-        active_treatment: activeTreatment ?? false,
-        regular_medications: regularMeds ?? false,
-        medications_detail: medsDetail.trim() || null,
-        smoking_status: smokingStatus || null,
-        has_eps: hasEps ?? false,
-      })
-
-      // 4. Call underwriting edge function
+      // 2–5. Call underwriting edge function — it writes profile fields,
+      //       health_questionnaire, and patient_applications via service role,
+      //       bypassing RLS (safe regardless of whether signUp returned a session).
       const age = calcAge()
-      const { data: aiData } = await supabase.functions.invoke('underwrite-patient', {
+      const { data: aiData, error: fnError } = await supabase.functions.invoke('underwrite-patient', {
         body: {
+          patient_id: userId,
+          patient_data: {
+            full_name:        fullName.trim(),
+            phone:            phone.trim() || null,
+            city:             city.trim() || null,
+            delivery_address: address.trim() || null,
+          },
           questionnaire: {
-            date_of_birth: dob || undefined,
-            biological_sex: sex || undefined,
-            conditions: conditions.filter((c) => c !== 'Ninguna de las anteriores'),
-            hospitalized_last_12m: hospitalized ?? false,
+            date_of_birth:          dob || undefined,
+            biological_sex:         sex || undefined,
+            conditions:             conditions.filter((c) => c !== 'Ninguna de las anteriores'),
+            hospitalized_last_12m:  hospitalized ?? false,
             hospitalization_reason: hospitalReason.trim() || undefined,
-            active_treatment: activeTreatment ?? false,
-            regular_medications: regularMeds ?? false,
-            medications_detail: medsDetail.trim() || undefined,
-            smoking_status: smokingStatus || undefined,
-            has_eps: hasEps ?? false,
-            age: age ?? undefined,
+            active_treatment:       activeTreatment ?? false,
+            regular_medications:    regularMeds ?? false,
+            medications_detail:     medsDetail.trim() || undefined,
+            smoking_status:         smokingStatus || undefined,
+            has_eps:                hasEps ?? false,
+            age:                    age ?? undefined,
           },
         },
       })
 
-      // 5. Create patient_applications row
-      await supabase.from('patient_applications').insert({
-        patient_id: userId,
-        status: 'pending',
-        ai_recommendation: aiData?.recommendation ?? null,
-        ai_score: aiData?.probability_high_cost != null ? Math.round(aiData.probability_high_cost * 100) : null,
-        ai_cost_expected_usd: aiData?.cost_breakdown?.total_expected_cost_usd ?? null,
-        ai_income_usd: aiData?.income_quarter_usd ?? 57,
-        ai_ratio: aiData?.ratio ?? null,
-        ai_drivers: aiData?.drivers ?? null,
-        ai_reasoning: aiData?.reasoning ?? null,
-        ai_sensitivity: aiData?.sensitivity_analysis ?? null,
-        rulebook_version_id: aiData?.rulebook?.id ?? null,
-      })
+      if (fnError) {
+        console.error('underwrite-patient error:', fnError)
+        // Non-fatal: the profile + application row may still have been written partially.
+        // Continue to sign out and show confirmation so the patient isn't left hanging.
+      }
 
       // 6. Notify admin
       try {
