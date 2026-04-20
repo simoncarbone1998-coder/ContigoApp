@@ -4,7 +4,7 @@ import LoadingSpinner from './LoadingSpinner'
 import type { Role } from '../lib/types'
 
 const roleHome: Record<Role, string> = {
-  patient:    '/paciente/perfil',
+  patient:    '/paciente/mi-salud',
   doctor:     '/doctor/agenda',
   admin:      '/admin/dashboard',
   laboratory: '/lab/dashboard',
@@ -29,7 +29,8 @@ export default function RequireRole({ role }: { role: Role }) {
   }
 
   // Patient application gate
-  // null = legacy / pre-underwriting patient → treat as approved
+  // Must be explicitly 'approved' (or null for legacy pre-underwriting patients) to access the app.
+  // New patients always start as 'pending' via the handle_new_user DB trigger.
   if (role === 'patient') {
     const appStatus = profile.application_status
     if (appStatus === 'pending') {
@@ -39,6 +40,10 @@ export default function RequireRole({ role }: { role: Role }) {
     if (appStatus === 'rejected') {
       if (pathname !== '/paciente/rejected') return <Navigate to="/paciente/rejected" replace />
       return <Outlet />
+    }
+    // Require explicit approval — block any status that is not 'approved' or null (legacy)
+    if (appStatus !== null && appStatus !== 'approved') {
+      return <Navigate to="/paciente/pending-application" replace />
     }
   }
 
