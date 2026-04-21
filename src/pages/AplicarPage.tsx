@@ -99,9 +99,10 @@ export default function AplicarPage() {
   const [smokingStatus,       setSmokingStatus]       = useState('')
   const [hasEps,              setHasEps]              = useState<boolean | null>(null)
 
-  const [step,       setStep]       = useState(0)
-  const [error,      setError]      = useState<string | null>(null)
-  const [submitting, setSubmitting] = useState(false)
+  const [step,        setStep]        = useState(0)
+  const [error,       setError]       = useState<string | null>(null)
+  const [emailError,  setEmailError]  = useState<string | null>(null)
+  const [submitting,  setSubmitting]  = useState(false)
   const [appliedEmail, setAppliedEmail] = useState('')
 
   if (loading) {
@@ -123,6 +124,11 @@ export default function AplicarPage() {
     return age
   }
 
+  // ── Email validation ──
+  function isValidEmail(e: string) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)
+  }
+
   // ── Condition toggle ──
   function toggleCondition(cond: string) {
     if (cond === 'Ninguna de las anteriores') {
@@ -140,7 +146,8 @@ export default function AplicarPage() {
   // ── Step 1 validation ──
   function validateStep1(): boolean {
     if (!fullName.trim()) { setError('Por favor ingresa tu nombre completo.'); return false }
-    if (!email.trim())    { setError('Por favor ingresa tu correo electrónico.'); return false }
+    if (!email.trim())    { setEmailError('Por favor ingresa un correo electrónico válido'); return false }
+    if (!isValidEmail(email)) { setEmailError('Por favor ingresa un correo electrónico válido'); return false }
     if (!phone.trim())    { setError('Por favor ingresa tu teléfono.'); return false }
     if (!city.trim())     { setError('Por favor ingresa tu ciudad.'); return false }
     if (!address.trim())  { setError('Por favor ingresa tu dirección.'); return false }
@@ -165,6 +172,7 @@ export default function AplicarPage() {
   // ── Advance to step 2 ──
   function goToStep2() {
     setError(null)
+    setEmailError(null)
     if (!validateStep1()) return
     setStep(1)
     window.scrollTo(0, 0)
@@ -184,12 +192,18 @@ export default function AplicarPage() {
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({ email, password })
       if (signUpError || !signUpData.user) {
         const msg = (signUpError?.message ?? '').toLowerCase()
-        if (msg.includes('already registered') || msg.includes('already exists')) {
-          setError('Este correo ya está registrado. ¿Quieres iniciar sesión?')
+        const code = (signUpError as { code?: string } | null)?.code ?? ''
+        if (
+          msg.includes('already registered') ||
+          msg.includes('already exists') ||
+          code === 'user_already_exists' ||
+          code === 'email_address_not_authorized'
+        ) {
+          setEmailError('ya_registrado')
         } else {
-          setError('No se pudo crear la cuenta. Intenta de nuevo.')
+          setError(`Hubo un problema con tu correo: ${signUpError?.message ?? 'Error desconocido'}`)
         }
-        setStep(1); setSubmitting(false); return
+        setStep(0); setSubmitting(false); window.scrollTo(0, 0); return
       }
 
       const userId = signUpData.user.id
@@ -304,8 +318,27 @@ export default function AplicarPage() {
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Correo electrónico</label>
-                <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
-                  placeholder="tu@correo.com" className={inputCls} />
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => { setEmail(e.target.value); setEmailError(null) }}
+                  onBlur={() => {
+                    if (email && !isValidEmail(email)) setEmailError('Por favor ingresa un correo electrónico válido')
+                  }}
+                  placeholder="tu@correo.com"
+                  className={inputCls + (emailError ? ' !border-red-400 focus:!border-red-400 focus:!ring-red-400/20' : '')}
+                />
+                {emailError && (
+                  <p className="mt-1.5 text-[13px] text-red-600">
+                    {emailError === 'ya_registrado' ? (
+                      <>
+                        Este correo ya está registrado.{' '}
+                        <Link to="/login" className="font-semibold underline">Inicia sesión aquí</Link>
+                      </>
+                    ) : emailError}
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Teléfono</label>
@@ -348,8 +381,8 @@ export default function AplicarPage() {
                 </div>
               </div>
 
-              <button onClick={goToStep2} style={BTN_BG}
-                className="w-full mt-2 text-white font-semibold py-3.5 rounded-xl text-sm hover:shadow-lg hover:scale-[1.01] active:scale-[0.99] transition-all">
+              <button onClick={goToStep2} disabled={!email.trim()} style={BTN_BG}
+                className="w-full mt-2 text-white font-semibold py-3.5 rounded-xl text-sm hover:shadow-lg hover:scale-[1.01] active:scale-[0.99] transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100 disabled:shadow-none">
                 Continuar →
               </button>
             </div>
