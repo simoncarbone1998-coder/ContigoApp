@@ -29,18 +29,19 @@ const IMG_EXAMS = [
   { name: 'Resonancia magnética (MRI) de rodilla',   category: 'imagenes' },
 ]
 
-type ExamCheck = { exam_name: string; category: string; price_cop: string; selected: boolean }
+// BUG 2: removed price_cop from ExamCheck
+type ExamCheck = { exam_name: string; category: string; selected: boolean }
 
 function buildExamList(type: string): ExamCheck[] {
   const all: ExamCheck[] = []
   if (type === 'laboratorio' || type === 'ambos')
-    all.push(...LAB_EXAMS.map((e) => ({ ...e, exam_name: e.name, price_cop: '', selected: false })))
+    all.push(...LAB_EXAMS.map((e) => ({ exam_name: e.name, category: e.category, selected: false })))
   if (type === 'imagenes' || type === 'ambos')
-    all.push(...IMG_EXAMS.map((e) => ({ ...e, exam_name: e.name, price_cop: '', selected: false })))
+    all.push(...IMG_EXAMS.map((e) => ({ exam_name: e.name, category: e.category, selected: false })))
   return all
 }
 
-type UploadState = 'idle' | 'uploading' | 'done'
+type UploadState = 'idle' | 'uploading' | 'done' | 'failed'
 
 export default function LabRegistroPage() {
   const navigate = useNavigate()
@@ -66,6 +67,7 @@ export default function LabRegistroPage() {
   const [camaraState,      setCamaraState]      = useState<UploadState>('idle')
   const [habilitacionState,setHabilitacionState]= useState<UploadState>('idle')
   const [rutState,         setRutState]         = useState<UploadState>('idle')
+  const [docWarning,       setDocWarning]       = useState<string | null>(null)
 
   const camaraRef       = useRef<HTMLInputElement>(null)
   const habilitacionRef = useRef<HTMLInputElement>(null)
@@ -87,9 +89,6 @@ export default function LabRegistroPage() {
   function toggleExam(idx: number) {
     setExams((prev) => prev.map((e, i) => i === idx ? { ...e, selected: !e.selected } : e))
   }
-  function setPrice(idx: number, val: string) {
-    setExams((prev) => prev.map((e, i) => i === idx ? { ...e, price_cop: val } : e))
-  }
 
   function goToStep3() {
     setError(null)
@@ -97,20 +96,18 @@ export default function LabRegistroPage() {
     setStep(3)
   }
 
+  // BUG 3: returns storage PATH (not public URL); non-blocking — throws on error but caller handles gracefully
   async function uploadDoc(file: File, labId: string, docType: string): Promise<string> {
     const ext  = file.name.split('.').pop()
     const path = `${labId}/${docType}.${ext}`
     const { error } = await supabase.storage.from('lab-documents').upload(path, file, { upsert: true })
-    if (error) throw new Error(`Error subiendo ${docType}`)
-    const { data: { publicUrl } } = supabase.storage.from('lab-documents').getPublicUrl(path)
-    return publicUrl
+    if (error) throw new Error(`Error subiendo ${docType}: ${error.message}`)
+    return path
   }
 
   async function handleSubmit() {
     setError(null)
-    if (!camaraFile || !habilitacionFile || !rutFile)
-      return setError('Sube los tres documentos requeridos.')
-
+    setDocWarning(null)
     setSubmitting(true)
 
     // 1. Create Supabase Auth user
@@ -128,7 +125,7 @@ export default function LabRegistroPage() {
       setSubmitting(false); return
     }
 
-    // 2. Create lab profile (also sets profile.role = 'laboratory')
+    // 2. Create lab profile
     const { data: labId, error: profileErr } = await supabase.rpc('create_lab_profile', {
       p_name:    name.trim(),
       p_phone:   phone.trim(),
@@ -144,47 +141,78 @@ export default function LabRegistroPage() {
 
     const labIdStr = labId as string
 
-    // 3. Upload documents
-    try {
-      setCamaraState('uploading')
-      const camaraUrl = await uploadDoc(camaraFile, labIdStr, 'camara_comercio')
-      setCamaraState('done')
-
-      setHabilitacionState('uploading')
-      const habilitacionUrl = await uploadDoc(habilitacionFile, labIdStr, 'habilitacion_supersalud')
-      setHabilitacionState('done')
-
-      setRutState('uploading')
-      const rutUrl = await uploadDoc(rutFile, labIdStr, 'rut')
-      setRutState('done')
-
-      await supabase.rpc('update_lab_docs', {
-        p_id: labIdStr,
-        p_camara_comercio_url: camaraUrl,
-        p_habilitacion_supersalud_url: habilitacionUrl,
-        p_rut_url: rutUrl,
-      })
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Error subiendo documentos.')
-      setSubmitting(false); return
-    }
-
-    // 4. Insert selected exam types
+    // 3. Insert selected exam types (always runs)
     const selectedExams = exams.filter((e) => e.selected).map((e) => ({
-      exam_name: e.exam_name, category: e.category,
-      price_cop: e.price_cop ? parseFloat(e.price_cop) : null,
+      exam_name: e.exam_name,
+      category:  e.category,
+      price_cop: null,
     }))
     await supabase.rpc('insert_lab_exam_types', {
       p_laboratory_id: labIdStr,
-      p_exams: JSON.stringify(selectedExams),
+      p_exams:         JSON.stringify(selectedExams),
     })
 
-    // 5. Notify admin
+    // 4. Upload documents — NON-BLOCKING (BUG 3)
+    // Registration succeeds even if uploads fail. Lab can upload from profile later.
+    const docPaths: { camara?: string; habilitacion?: string; rut?: string } = {}
+    const failedDocs: string[] = []
+
+    if (camaraFile) {
+      try {
+        setCamaraState('uploading')
+        docPaths.camara = await uploadDoc(camaraFile, labIdStr, 'camara_comercio')
+        setCamaraState('done')
+      } catch (e) {
+        console.error(e)
+        setCamaraState('failed')
+        failedDocs.push('Cámara de Comercio')
+      }
+    }
+
+    if (habilitacionFile) {
+      try {
+        setHabilitacionState('uploading')
+        docPaths.habilitacion = await uploadDoc(habilitacionFile, labIdStr, 'habilitacion_supersalud')
+        setHabilitacionState('done')
+      } catch (e) {
+        console.error(e)
+        setHabilitacionState('failed')
+        failedDocs.push('Habilitación Supersalud')
+      }
+    }
+
+    if (rutFile) {
+      try {
+        setRutState('uploading')
+        docPaths.rut = await uploadDoc(rutFile, labIdStr, 'rut')
+        setRutState('done')
+      } catch (e) {
+        console.error(e)
+        setRutState('failed')
+        failedDocs.push('RUT')
+      }
+    }
+
+    // Update doc paths if any succeeded
+    if (docPaths.camara || docPaths.habilitacion || docPaths.rut) {
+      await supabase.rpc('update_lab_docs', {
+        p_id:                          labIdStr,
+        p_camara_comercio_url:         docPaths.camara        ?? null,
+        p_habilitacion_supersalud_url: docPaths.habilitacion  ?? null,
+        p_rut_url:                     docPaths.rut           ?? null,
+      })
+    }
+
+    if (failedDocs.length > 0) {
+      setDocWarning(`Los siguientes documentos no pudieron subirse y podrás subirlos desde tu perfil después de la aprobación: ${failedDocs.join(', ')}`)
+    }
+
+    // 5. Notify admin (non-critical)
     try {
       await supabase.functions.invoke('send-email', {
         body: {
-          to: 'simoncarbone1998@gmail.com',
-          subject: '🔬 Nuevo centro aliado pendiente — Contigo',
+          to:      'simoncarbone1998@gmail.com',
+          subject: '🔬 Nuevo centro de diagnóstico pendiente — Contigo',
           html: `
             <p>Un nuevo centro se ha registrado y está pendiente de aprobación.</p>
             <br/>
@@ -194,13 +222,13 @@ export default function LabRegistroPage() {
             <p><strong>Email:</strong> ${email.trim()}</p>
             <p><strong>Servicios:</strong> ${selectedExams.map((e) => e.exam_name).join(', ')}</p>
             <br/>
-            <p><a href="https://contigomedicina.com/admin/dashboard">Ver en panel admin →</a></p>
+            <p><a href="https://contigomedicina.com/admin/aprobaciones/laboratorios">Ver en panel admin →</a></p>
           `,
         },
       })
     } catch { /* non-critical */ }
 
-    // 6. Sign out — lab must wait for approval before accessing portal
+    // 6. Sign out — lab must wait for approval
     await supabase.auth.signOut()
 
     setSubmitting(false)
@@ -217,11 +245,16 @@ export default function LabRegistroPage() {
           <div className="text-5xl">✅</div>
           <h1 className="text-xl font-bold text-slate-900">¡Solicitud enviada!</h1>
           <p className="text-slate-500 text-sm leading-relaxed">
-            Revisaremos tu información y documentos. Te notificaremos por email
+            Revisaremos tu información. Te notificaremos por email
             cuando tu centro sea aprobado. Este proceso puede tomar 1–3 días hábiles.
           </p>
+          {docWarning && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-700 text-left">
+              ⚠️ {docWarning}
+            </div>
+          )}
           <button
-            onClick={() => { navigate('/login?type=lab') }}
+            onClick={() => navigate('/login?type=lab')}
             className="w-full py-3 rounded-xl text-white font-semibold text-sm mt-2 transition-all hover:opacity-90"
             style={{ background: 'linear-gradient(135deg, #1e3a5f 0%, #16a34a 100%)' }}
           >
@@ -242,7 +275,7 @@ export default function LabRegistroPage() {
         {/* Header */}
         <div className="flex flex-col items-center mb-8">
           <img src="/logo.png" alt="Contigo" className="h-12 w-auto mb-3" />
-          <h1 className="text-lg font-bold text-white">Registro de Centro Aliado</h1>
+          <h1 className="text-lg font-bold text-white">Registro de centro de diagnóstico</h1>
           <p className="text-white/60 text-sm mt-1">Paso {step} de 3</p>
           <div className="flex gap-2 mt-3">
             {[1, 2, 3].map((s) => (
@@ -268,11 +301,11 @@ export default function LabRegistroPage() {
               <h2 className="text-lg font-bold text-slate-900 mb-2">Información del centro</h2>
 
               {[
-                { id: 'name',    label: 'Nombre del centro',       value: name,    set: setName,    ph: 'Laboratorio Clínico XYZ', type: 'text' },
-                { id: 'city',    label: 'Ciudad',                   value: city,    set: setCity,    ph: 'ej: Bogotá',              type: 'text' },
-                { id: 'address', label: 'Dirección',                value: address, set: setAddress, ph: 'ej: Calle 45 #23-10',     type: 'text' },
-                { id: 'phone',   label: 'Teléfono',                 value: phone,   set: setPhone,   ph: 'ej: 6012345678',          type: 'tel' },
-                { id: 'email',   label: 'Correo electrónico',       value: email,   set: setEmail,   ph: 'admin@centro.com',        type: 'email' },
+                { id: 'name',    label: 'Nombre del centro',     value: name,    set: setName,    ph: 'Centro de Diagnóstico XYZ', type: 'text' },
+                { id: 'city',    label: 'Ciudad',                 value: city,    set: setCity,    ph: 'ej: Bogotá',               type: 'text' },
+                { id: 'address', label: 'Dirección',              value: address, set: setAddress, ph: 'ej: Calle 45 #23-10',      type: 'text' },
+                { id: 'phone',   label: 'Teléfono',               value: phone,   set: setPhone,   ph: 'ej: 6012345678',           type: 'tel' },
+                { id: 'email',   label: 'Correo electrónico',     value: email,   set: setEmail,   ph: 'admin@centro.com',         type: 'email' },
               ].map(({ id, label, value, set, ph, type: t }) => (
                 <div key={id}>
                   <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{label}</label>
@@ -294,7 +327,7 @@ export default function LabRegistroPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 {[
-                  { id: 'pwd',  label: 'Contraseña',        value: password,        set: setPassword,        ph: '••••••••', ac: 'new-password' },
+                  { id: 'pwd',  label: 'Contraseña',           value: password,        set: setPassword,        ph: '••••••••', ac: 'new-password' },
                   { id: 'cpwd', label: 'Confirmar contraseña', value: confirmPassword, set: setConfirmPassword, ph: '••••••••', ac: 'new-password' },
                 ].map(({ id, label, value, set, ph, ac }) => (
                   <div key={id}>
@@ -318,28 +351,23 @@ export default function LabRegistroPage() {
             </div>
           )}
 
-          {/* ── STEP 2 ── */}
+          {/* ── STEP 2 ── BUG 2: no price fields */}
           {step === 2 && (
             <div className="space-y-5">
               <h2 className="text-lg font-bold text-slate-900">Servicios disponibles</h2>
-              <p className="text-sm text-slate-500">Selecciona los exámenes que ofrece tu centro e ingresa el precio.</p>
+              <p className="text-sm text-slate-500">Selecciona los exámenes que ofrece tu centro.</p>
 
               {labExams.length > 0 && (
                 <div>
                   <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">🧪 Laboratorio Clínico</h3>
                   <div className="space-y-2">
-                    {labExams.map((exam, i) => {
+                    {labExams.map((exam) => {
                       const idx = exams.indexOf(exam)
                       return (
                         <div key={exam.exam_name} className={`flex items-center gap-3 p-3 rounded-xl border transition-colors ${exam.selected ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200 bg-white'}`}>
                           <input type="checkbox" checked={exam.selected} onChange={() => toggleExam(idx)}
-                            className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 shrink-0" id={`exam-${i}`} />
-                          <label htmlFor={`exam-${i}`} className="flex-1 text-sm text-slate-800 font-medium cursor-pointer">{exam.exam_name}</label>
-                          {exam.selected && (
-                            <input type="number" value={exam.price_cop} onChange={(e) => setPrice(idx, e.target.value)}
-                              placeholder="Precio COP" min="0" step="1000"
-                              className="w-32 border border-emerald-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-400 transition-colors text-right" />
-                          )}
+                            className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 shrink-0" id={`exam-lab-${idx}`} />
+                          <label htmlFor={`exam-lab-${idx}`} className="flex-1 text-sm text-slate-800 font-medium cursor-pointer">{exam.exam_name}</label>
                         </div>
                       )
                     })}
@@ -351,18 +379,13 @@ export default function LabRegistroPage() {
                 <div>
                   <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">📷 Imágenes Diagnósticas</h3>
                   <div className="space-y-2">
-                    {imgExams.map((exam, i) => {
+                    {imgExams.map((exam) => {
                       const idx = exams.indexOf(exam)
                       return (
                         <div key={exam.exam_name} className={`flex items-center gap-3 p-3 rounded-xl border transition-colors ${exam.selected ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200 bg-white'}`}>
                           <input type="checkbox" checked={exam.selected} onChange={() => toggleExam(idx)}
-                            className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 shrink-0" id={`img-${i}`} />
-                          <label htmlFor={`img-${i}`} className="flex-1 text-sm text-slate-800 font-medium cursor-pointer">{exam.exam_name}</label>
-                          {exam.selected && (
-                            <input type="number" value={exam.price_cop} onChange={(e) => setPrice(idx, e.target.value)}
-                              placeholder="Precio COP" min="0" step="1000"
-                              className="w-32 border border-emerald-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-400 transition-colors text-right" />
-                          )}
+                            className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 shrink-0" id={`exam-img-${idx}`} />
+                          <label htmlFor={`exam-img-${idx}`} className="flex-1 text-sm text-slate-800 font-medium cursor-pointer">{exam.exam_name}</label>
                         </div>
                       )
                     })}
@@ -384,18 +407,18 @@ export default function LabRegistroPage() {
             </div>
           )}
 
-          {/* ── STEP 3 ── */}
+          {/* ── STEP 3 ── BUG 3: documents optional/non-blocking */}
           {step === 3 && (
             <div className="space-y-5">
               <div>
                 <h2 className="text-lg font-bold text-slate-900">Documentos requeridos</h2>
-                <p className="text-sm text-slate-500 mt-1">Necesitamos verificar tu centro antes de aprobarlo. Solo PDF, máximo 10 MB.</p>
+                <p className="text-sm text-slate-500 mt-1">Adjunta los documentos de tu centro. Solo PDF, máximo 10 MB.</p>
               </div>
 
               {[
-                { label: 'Cámara de Comercio', helper: 'Certificado de existencia y representación legal vigente', ref: camaraRef, file: camaraFile, setFile: setCamaraFile, state: camaraState },
+                { label: 'Cámara de Comercio',      helper: 'Certificado de existencia y representación legal vigente',        ref: camaraRef,       file: camaraFile,       setFile: setCamaraFile,       state: camaraState },
                 { label: 'Habilitación Supersalud', helper: 'Certificado de habilitación como prestador de servicios de salud', ref: habilitacionRef, file: habilitacionFile, setFile: setHabilitacionFile, state: habilitacionState },
-                { label: 'RUT', helper: 'Registro Único Tributario actualizado', ref: rutRef, file: rutFile, setFile: setRutFile, state: rutState },
+                { label: 'RUT',                     helper: 'Registro Único Tributario actualizado',                            ref: rutRef,           file: rutFile,           setFile: setRutFile,           state: rutState },
               ].map(({ label, helper, ref, file, setFile, state }) => (
                 <div key={label}>
                   <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">{label}</label>
@@ -408,13 +431,13 @@ export default function LabRegistroPage() {
                       {file ? (
                         <span className="text-sm text-emerald-700 font-medium truncate">{file.name}</span>
                       ) : (
-                        <span className="text-sm text-slate-500">Sin archivo</span>
+                        <span className="text-sm text-slate-400 italic">Opcional — se puede subir después</span>
                       )}
                       {state === 'uploading' && <span className="text-xs text-blue-600 font-medium shrink-0">Subiendo...</span>}
                       {state === 'done'      && <span className="text-xs text-emerald-600 font-medium shrink-0">✓</span>}
+                      {state === 'failed'    && <span className="text-xs text-red-500 font-medium shrink-0">Error</span>}
                     </div>
-                    <button type="button"
-                      onClick={() => ref.current?.click()}
+                    <button type="button" onClick={() => ref.current?.click()}
                       className="shrink-0 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors">
                       {file ? 'Cambiar' : 'Subir PDF'}
                     </button>
@@ -430,7 +453,7 @@ export default function LabRegistroPage() {
               ))}
 
               <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-3">
-                ⏳ Tu centro será revisado por nuestro equipo. Te notificaremos por email cuando sea aprobado.
+                ⏳ Tu centro será revisado por nuestro equipo. Si no puedes subir algún documento ahora, podrás hacerlo desde tu perfil después. Te notificaremos por email cuando sea aprobado.
               </p>
 
               <div className="flex gap-3 pt-2">
