@@ -63,7 +63,7 @@ function LogoBrand() {
   return (
     <div className="flex items-center gap-3">
       {!imgFailed ? (
-        <img src="/logo.png" alt="Contigo" className="h-9 w-auto brightness-0 invert" onError={() => setImgFailed(true)} />
+        <img src="/logo.png" alt="Contigo" className="h-9 w-auto" onError={() => setImgFailed(true)} />
       ) : (
         <span className="text-white font-bold text-xl leading-none">contigo</span>
       )}
