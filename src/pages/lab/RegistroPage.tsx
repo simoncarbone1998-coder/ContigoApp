@@ -254,7 +254,7 @@ export default function LabRegistroPage() {
             </div>
           )}
           <button
-            onClick={() => navigate('/login?type=lab')}
+            onClick={() => navigate('/login')}
             className="w-full py-3 rounded-xl text-white font-semibold text-sm mt-2 transition-all hover:opacity-90"
             style={{ background: 'linear-gradient(135deg, #1e3a5f 0%, #16a34a 100%)' }}
           >
@@ -267,7 +267,7 @@ export default function LabRegistroPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-12" style={BG}>
-      <Link to="/lab/login" className="fixed top-4 left-4 z-10 text-white/80 hover:text-white text-sm font-medium hover:underline transition-colors">
+      <Link to="/login" className="fixed top-4 left-4 z-10 text-white/80 hover:text-white text-sm font-medium hover:underline transition-colors">
         ← Volver
       </Link>
 
@@ -321,7 +321,7 @@ export default function LabRegistroPage() {
                   <option value="">Seleccionar...</option>
                   <option value="laboratorio">Laboratorio clínico</option>
                   <option value="imagenes">Centro de imágenes diagnósticas</option>
-                  <option value="ambos">Ambos (laboratorio e imágenes)</option>
+                  <option value="ambos">Ambos (centro de diagnóstico e imágenes)</option>
                 </select>
               </div>
 
@@ -346,7 +346,7 @@ export default function LabRegistroPage() {
               </button>
               <p className="text-center text-sm text-slate-500 mt-2">
                 ¿Ya tienes cuenta?{' '}
-                <Link to="/lab/login" className="text-emerald-700 font-semibold hover:underline">Iniciar sesión</Link>
+                <Link to="/login" className="text-emerald-700 font-semibold hover:underline">Iniciar sesión</Link>
               </p>
             </div>
           )}

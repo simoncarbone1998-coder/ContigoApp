@@ -5,7 +5,7 @@ export default function LabLoginPage() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    navigate('/login?type=lab', { replace: true })
+    navigate('/login', { replace: true })
   }, [navigate])
 
   return null

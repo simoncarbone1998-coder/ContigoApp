@@ -8,7 +8,7 @@ export default function LabPendingPage() {
 
   async function handleLogout() {
     await supabase.auth.signOut()
-    navigate('/lab/login', { replace: true })
+    navigate('/login', { replace: true })
   }
 
   return (
@@ -32,7 +32,7 @@ export default function LabPendingPage() {
             <div className="space-y-3 text-sm">
               {[
                 { label: 'Centro',  value: lab.name },
-                { label: 'Tipo',    value: lab.type === 'laboratorio' ? 'Laboratorio clínico' : lab.type === 'imagenes' ? 'Imágenes diagnósticas' : 'Laboratorio e imágenes' },
+                { label: 'Tipo',    value: lab.type === 'laboratorio' ? 'Laboratorio clínico' : lab.type === 'imagenes' ? 'Imágenes diagnósticas' : 'Centro de diagnóstico e imágenes' },
                 { label: 'Ciudad',  value: lab.city },
                 { label: 'Correo',  value: lab.email },
               ].map(({ label, value }) => value && (

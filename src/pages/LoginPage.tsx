@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { Role } from '../lib/types'
@@ -91,9 +91,6 @@ export default function LoginPage() {
   const navigate = useNavigate()
   const { profile, loading } = useAuth()
 
-  const [searchParams]                = useSearchParams()
-  const isLabLogin                    = searchParams.get('type') === 'lab'
-
   const [email, setEmail]             = useState('')
   const [password, setPassword]       = useState('')
   const [showPwd, setShowPwd]         = useState(false)
@@ -149,11 +146,6 @@ export default function LoginPage() {
               Bienvenido de nuevo
             </h1>
             <p className="text-slate-500 text-sm mt-1">Inicia sesión en tu cuenta Contigo</p>
-            {isLabLogin && (
-              <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-700">
-                🔬 Centro Aliado
-              </div>
-            )}
           </div>
 
           {/* Error */}
@@ -238,15 +230,6 @@ export default function LoginPage() {
             </Link>
           </p>
 
-          {/* Lab portal link */}
-          <div className="mt-6 pt-5 border-t border-slate-100 text-center">
-            <p className="text-xs text-slate-400">
-              ¿Eres un centro de diagnóstico?{' '}
-              <Link to="/lab/login" className="text-slate-500 hover:text-slate-700 hover:underline transition-colors">
-                Ingresa aquí
-              </Link>
-            </p>
-          </div>
 
         </div>
       </div>

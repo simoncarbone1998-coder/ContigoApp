@@ -8,7 +8,7 @@ export default function LabRejectedPage() {
 
   async function handleLogout() {
     await supabase.auth.signOut()
-    navigate('/lab/login', { replace: true })
+    navigate('/login', { replace: true })
   }
 
   return (
