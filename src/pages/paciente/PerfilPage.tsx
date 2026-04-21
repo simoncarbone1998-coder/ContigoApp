@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import NavBar from '../../components/NavBar'
@@ -11,6 +11,12 @@ function formatDate(d: string) {
   return `${day}/${m}/${y}`
 }
 function formatTime(t: string) { return t.slice(0, 5) }
+
+const MONTHS_ES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
+function formatBirthDate(d: string) {
+  const [y, m, day] = d.split('-')
+  return `${parseInt(day)} de ${MONTHS_ES[parseInt(m) - 1]} de ${y}`
+}
 
 function calcAge(birthDate: string): number {
   const today = new Date()
@@ -26,12 +32,30 @@ const TODAY = new Date().toISOString().slice(0, 10)
 export default function PatientPerfilPage() {
   const { profile, refreshProfile } = useAuth()
 
+  const [editing, setEditing]     = useState(false)
   const [fullName, setFullName]   = useState(profile?.full_name ?? '')
   const [phone, setPhone]         = useState(profile?.phone ?? '')
   const [birthDate, setBirthDate] = useState(profile?.birth_date ?? '')
   const [city, setCity]           = useState(profile?.city ?? '')
   const [saving, setSaving]       = useState(false)
   const [saveMsg, setSaveMsg]     = useState<{ ok: boolean; text: string } | null>(null)
+
+  function enterEdit() {
+    setFullName(profile?.full_name ?? '')
+    setPhone(profile?.phone ?? '')
+    setBirthDate(profile?.birth_date ?? '')
+    setCity(profile?.city ?? '')
+    setSaveMsg(null)
+    setEditing(true)
+  }
+  function cancelEdit() {
+    setFullName(profile?.full_name ?? '')
+    setPhone(profile?.phone ?? '')
+    setBirthDate(profile?.birth_date ?? '')
+    setCity(profile?.city ?? '')
+    setSaveMsg(null)
+    setEditing(false)
+  }
 
   const fileRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
@@ -122,6 +146,7 @@ export default function PatientPerfilPage() {
       setSaveMsg({ ok: false, text: 'No se pudo guardar. Intenta de nuevo.' })
     } else {
       await refreshProfile()
+      setEditing(false)
       setSaveMsg({ ok: true, text: 'Perfil actualizado.' })
     }
     setSaving(false)
@@ -191,58 +216,99 @@ export default function PatientPerfilPage() {
           </div>
 
           {saveMsg && (
-            <div className={`mb-4 p-3 rounded-xl text-sm ${saveMsg.ok ? 'bg-emerald-50 border border-emerald-200 text-emerald-800' : 'bg-red-50 border border-red-200 text-red-700'}`}>
+            <div className={`mb-4 p-3 rounded-xl text-sm transition-opacity duration-200 ${saveMsg.ok ? 'bg-emerald-50 border border-emerald-200 text-emerald-800' : 'bg-red-50 border border-red-200 text-red-700'}`}>
               {saveMsg.text}
             </div>
           )}
 
-          <form onSubmit={handleSave} className="grid sm:grid-cols-2 gap-4">
-            <div className="sm:col-span-2">
-              <label htmlFor="fullName" className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Nombre completo</label>
-              <input id="fullName" type="text" value={fullName} onChange={(e) => setFullName(e.target.value)}
-                className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors" />
-            </div>
+          {/* ── VIEW MODE ── */}
+          <div style={{ opacity: editing ? 0 : 1, pointerEvents: editing ? 'none' : 'auto', transition: 'opacity 200ms' } as CSSProperties}>
+            {!editing && (
+              <>
+                <dl className="space-y-4">
+                  {(
+                    [
+                      { label: 'Nombre completo',      value: profile?.full_name },
+                      { label: 'Correo electrónico',   value: profile?.email },
+                      { label: 'Teléfono',              value: profile?.phone },
+                      { label: 'Ciudad',                value: profile?.city },
+                      {
+                        label: 'Fecha de nacimiento',
+                        value: profile?.birth_date
+                          ? `${formatBirthDate(profile.birth_date)}${age !== null ? ` · ${age} años` : ''}`
+                          : undefined,
+                      },
+                    ] as { label: string; value: string | null | undefined }[]
+                  ).map(({ label, value }) => (
+                    <div key={label} className="py-2 border-b border-slate-100 last:border-0">
+                      <dt className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-0.5">{label}</dt>
+                      <dd className="text-[15px] text-slate-900">
+                        {value ?? <span className="text-slate-400 italic text-sm">No registrado</span>}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+                <div className="flex justify-end mt-5">
+                  <button
+                    type="button"
+                    onClick={enterEdit}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl border border-blue-300 text-sm font-semibold text-blue-600 hover:bg-blue-50 transition-colors"
+                  >
+                    ✏️ Editar perfil
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
 
-            <div>
-              <label htmlFor="phone" className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Teléfono</label>
-              <input id="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
-                className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors" />
-            </div>
+          {/* ── EDIT MODE ── */}
+          <div style={{ opacity: editing ? 1 : 0, pointerEvents: editing ? 'auto' : 'none', transition: 'opacity 200ms' } as CSSProperties}>
+            {editing && (
+              <form onSubmit={handleSave} className="grid sm:grid-cols-2 gap-4">
+                <div className="sm:col-span-2">
+                  <label htmlFor="fullName" className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Nombre completo</label>
+                  <input id="fullName" type="text" value={fullName} onChange={(e) => setFullName(e.target.value)}
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors" />
+                </div>
 
-            <div>
-              <label htmlFor="city" className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Ciudad</label>
-              <input id="city" type="text" value={city} onChange={(e) => setCity(e.target.value)}
-                placeholder="Bogotá, Medellín..."
-                className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors" />
-            </div>
+                <div className="sm:col-span-2">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Correo electrónico</p>
+                  <p className="text-sm text-slate-600 bg-slate-50 border border-slate-100 rounded-xl px-3.5 py-2.5">{profile?.email}</p>
+                  <p className="text-xs text-slate-400 mt-1">El correo no puede modificarse</p>
+                </div>
 
-            <div>
-              <label htmlFor="birthDate" className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Fecha de nacimiento</label>
-              <input id="birthDate" type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)}
-                className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors" />
-            </div>
+                <div>
+                  <label htmlFor="phone" className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Teléfono</label>
+                  <input id="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors" />
+                </div>
 
-            <div className="flex items-end">
-              <div className="w-full">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Edad</p>
-                <p className="text-sm font-semibold text-slate-900 bg-slate-50 border border-slate-100 rounded-xl px-3.5 py-2.5">
-                  {age !== null ? `${age} años` : '—'}
-                </p>
-              </div>
-            </div>
+                <div>
+                  <label htmlFor="city" className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Ciudad</label>
+                  <input id="city" type="text" value={city} onChange={(e) => setCity(e.target.value)}
+                    placeholder="Bogotá, Medellín..."
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors" />
+                </div>
 
-            <div className="sm:col-span-2">
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Correo electrónico</p>
-              <p className="text-sm text-slate-600 bg-slate-50 border border-slate-100 rounded-xl px-3.5 py-2.5">{profile?.email}</p>
-            </div>
+                <div>
+                  <label htmlFor="birthDate" className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Fecha de nacimiento</label>
+                  <input id="birthDate" type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)}
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors" />
+                </div>
 
-            <div className="sm:col-span-2">
-              <button type="submit" disabled={saving}
-                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-50 shadow-sm shadow-blue-100">
-                {saving ? 'Guardando...' : 'Guardar cambios'}
-              </button>
-            </div>
-          </form>
+                <div className="sm:col-span-2 flex gap-3">
+                  <button type="submit" disabled={saving}
+                    className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-50 shadow-sm shadow-blue-100">
+                    {saving ? 'Guardando...' : 'Guardar cambios'}
+                  </button>
+                  <button type="button" onClick={cancelEdit} disabled={saving}
+                    className="px-6 py-2.5 border border-slate-200 text-slate-700 text-sm font-semibold rounded-xl hover:bg-slate-50 transition-colors disabled:opacity-50">
+                    Cancelar
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
         </div>
 
         {/* Appointment history */}
