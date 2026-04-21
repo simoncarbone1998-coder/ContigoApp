@@ -162,7 +162,7 @@ export default function RegistroPage() {
               className="group bg-white rounded-2xl p-8 text-left hover:border-violet-400 border-2 border-transparent transition-all hover:shadow-xl hover:-translate-y-0.5 duration-200"
             >
               <div className="text-5xl mb-4">🔬</div>
-              <h2 className="text-lg font-bold text-slate-900 mb-1">Soy laboratorio</h2>
+              <h2 className="text-lg font-bold text-slate-900 mb-1">Soy centro de diagnóstico</h2>
               <p className="text-slate-500 text-sm mb-6 leading-relaxed">
                 Registra tu centro diagnóstico y gestiona órdenes de exámenes.
               </p>
