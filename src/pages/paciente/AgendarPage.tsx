@@ -259,10 +259,30 @@ export default function PatientAgendarPage() {
     setSubmitting(true)
     setError(null)
 
+    // Fetch ALL unbooked slots for this specialty + date + time, then pick randomly
+    const { data: candidates } = await supabase
+      .from('availability_slots')
+      .select('*, doctor:doctor_id(id, full_name, email, specialty)')
+      .eq('is_booked', false)
+      .eq('date', bookingSlot.date)
+      .eq('start_time', bookingSlot.start_time)
+
+    const matching = ((candidates ?? []) as AvailabilitySlot[]).filter(
+      (s) => s.specialty === selectedSpecialty || s.doctor?.specialty === selectedSpecialty
+    )
+
+    if (matching.length === 0) {
+      setError('Este horario ya no está disponible. Intenta con otro.')
+      setSubmitting(false)
+      return
+    }
+
+    const picked = matching[Math.floor(Math.random() * matching.length)]
+
     const { data: apptData, error: err } = await supabase.from('appointments').insert({
       patient_id: profile.id,
-      doctor_id:  bookingSlot.doctor_id,
-      slot_id:    bookingSlot.id,
+      doctor_id:  picked.doctor_id,
+      slot_id:    picked.id,
       status:     'confirmed',
       reason:     reason.trim() || null,
     }).select('id').single()
@@ -270,9 +290,7 @@ export default function PatientAgendarPage() {
     if (err) {
       setError('No se pudo reservar la cita. Intenta con otro horario.')
     } else {
-      setSuccess(
-        `¡Cita confirmada con ${bookingSlot.doctor?.full_name ?? 'el doctor'} el ${formatDate(bookingSlot.date)} · ${formatTime(bookingSlot.start_time)}.`
-      )
+      setSuccess('¡Cita confirmada! Te enviamos un email con los detalles.')
 
       // Upload pre-appointment files (fire-and-forget)
       if (apptData?.id && preFiles.length > 0) {
@@ -299,14 +317,14 @@ export default function PatientAgendarPage() {
 
       // Fire-and-forget confirmation emails (non-blocking)
       if (profile.email) {
-        const fecha = fmtDate(bookingSlot.date)
-        const hora  = `${fmtTime(bookingSlot.start_time)} – ${fmtTime(bookingSlot.end_time)}`
+        const fecha = fmtDate(picked.date)
+        const hora  = `${fmtTime(picked.start_time)} – ${fmtTime(picked.end_time)}`
         sendConfirmationEmails({
           patientEmail: profile.email,
           patientName:  profile.full_name ?? 'Paciente',
-          doctorEmail:  bookingSlot.doctor?.email,
-          doctorName:   bookingSlot.doctor?.full_name ?? 'Doctor',
-          specialty:    specialtyLabel(bookingSlot.doctor?.specialty ?? selectedSpecialty as Specialty),
+          doctorEmail:  picked.doctor?.email,
+          doctorName:   picked.doctor?.full_name ?? 'Doctor',
+          specialty:    specialtyLabel(picked.doctor?.specialty ?? selectedSpecialty as Specialty),
           fecha,
           hora,
           reason: reason.trim() || null,
@@ -543,38 +561,25 @@ export default function PatientAgendarPage() {
               </h2>
             </div>
 
-            {/* Doctor info */}
-            {daySlots[0]?.doctor && (
-              <div className="flex items-center gap-3 mb-5 p-3 bg-slate-50 rounded-xl border border-slate-100">
-                <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center shrink-0">
-                  <span className="text-blue-700 font-bold text-sm">
-                    {(daySlots[0].doctor.full_name ?? 'D')[0].toUpperCase()}
-                  </span>
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-slate-900">Dr(a). {daySlots[0].doctor.full_name}</p>
-                  <p className="text-xs text-slate-500">{specialtyLabel(daySlots[0].doctor.specialty)}</p>
-                </div>
-              </div>
-            )}
-
             <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5">
-              {daySlots.map((slot) => (
-                <button
-                  key={slot.id}
-                  onClick={() => { setBookingSlot(slot); setReason(''); setSuccess(null) }}
-                  className={`p-3 rounded-xl border text-center transition-colors ${
-                    bookingSlot?.id === slot.id
-                      ? 'bg-blue-600 border-blue-600 text-white shadow-sm shadow-blue-200'
-                      : 'bg-white border-slate-200 text-slate-700 hover:border-blue-300 hover:bg-blue-50'
-                  }`}
-                >
-                  <p className="text-sm font-bold">{formatTime(slot.start_time)}</p>
-                  <p className={`text-xs mt-0.5 ${bookingSlot?.id === slot.id ? 'text-blue-100' : 'text-slate-400'}`}>
-                    – {formatTime(slot.end_time)}
-                  </p>
-                </button>
-              ))}
+              {daySlots
+                .filter((s, i, arr) => arr.findIndex((x) => x.start_time === s.start_time) === i)
+                .map((slot) => (
+                  <button
+                    key={slot.start_time}
+                    onClick={() => { setBookingSlot(slot); setReason(''); setSuccess(null) }}
+                    className={`p-3 rounded-xl border text-center transition-colors ${
+                      bookingSlot?.start_time === slot.start_time
+                        ? 'bg-blue-600 border-blue-600 text-white shadow-sm shadow-blue-200'
+                        : 'bg-white border-slate-200 text-slate-700 hover:border-blue-300 hover:bg-blue-50'
+                    }`}
+                  >
+                    <p className="text-sm font-bold">{formatTime(slot.start_time)}</p>
+                    <p className={`text-xs mt-0.5 ${bookingSlot?.start_time === slot.start_time ? 'text-blue-100' : 'text-slate-400'}`}>
+                      – {formatTime(slot.end_time)}
+                    </p>
+                  </button>
+                ))}
             </div>
 
             {bookingSlot && (
