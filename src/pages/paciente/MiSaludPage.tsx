@@ -968,7 +968,6 @@ export default function MiSaludPage() {
                           {slotsByDate[d].map(slot => (
                             <button
                               key={slot.id}
-                              title={`Dr(a). ${slot.doctor?.full_name}`}
                               onClick={() => { setBookingSlot(slot); setBookingStep(2) }}
                               className="px-3.5 py-2 rounded-xl border text-sm font-semibold transition-colors bg-white border-slate-200 text-slate-700 hover:border-blue-400 hover:bg-blue-50"
                             >
@@ -976,9 +975,6 @@ export default function MiSaludPage() {
                             </button>
                           ))}
                         </div>
-                        <p className="text-xs text-slate-400 mt-1">
-                          Dr(a). {slotsByDate[d][0]?.doctor?.full_name}
-                        </p>
                       </div>
                     ))}
                   </div>
@@ -993,7 +989,7 @@ export default function MiSaludPage() {
                 <div className="p-3.5 bg-blue-50 border border-blue-100 rounded-xl">
                   <p className="text-sm font-semibold text-blue-900">{formatDateLong(bookingSlot.date)}</p>
                   <p className="text-xs text-blue-700 mt-0.5">
-                    {formatTimeAMPM(bookingSlot.start_time)} · Dr(a). {bookingSlot.doctor?.full_name}
+                    {formatTimeAMPM(bookingSlot.start_time)}
                   </p>
                 </div>
 
@@ -1175,7 +1171,6 @@ export default function MiSaludPage() {
                           {rscSlotsByDate[d].map(slot => (
                             <button
                               key={slot.id}
-                              title={`Dr(a). ${slot.doctor?.full_name}`}
                               onClick={() => { setRscDate(d); setRscSlot(slot) }}
                               className={`px-3.5 py-2 rounded-xl border text-sm font-semibold transition-colors ${
                                 rscSlot?.id === slot.id
@@ -1187,9 +1182,6 @@ export default function MiSaludPage() {
                             </button>
                           ))}
                         </div>
-                        <p className="text-xs text-slate-400 mt-1">
-                          Dr(a). {rscSlotsByDate[d][0]?.doctor?.full_name}
-                        </p>
                       </div>
                     ))}
 
@@ -1211,8 +1203,7 @@ export default function MiSaludPage() {
                 <h2 className="text-lg font-bold text-slate-900 text-center mb-2">¿Confirmas el cambio?</h2>
                 <p className="text-sm text-slate-500 text-center mb-5 leading-relaxed">
                   Nueva cita: <strong className="text-slate-700">{rscSlot ? formatDateLong(rscSlot.date) : ''}</strong>{' '}
-                  a las <strong className="text-slate-700">{rscSlot ? formatTimeAMPM(rscSlot.start_time) : ''}</strong><br />
-                  con <strong className="text-slate-700">Dr(a). {rscSlot?.doctor?.full_name ?? '—'}</strong>
+                  a las <strong className="text-slate-700">{rscSlot ? formatTimeAMPM(rscSlot.start_time) : ''}</strong>
                 </p>
                 {rscError && (
                   <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">{rscError}</div>
