@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
@@ -22,6 +22,40 @@ export default function DoctorPerfilPage() {
   const fileRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
   const [avatarUrl, setAvatarUrl] = useState(profile?.avatar_url ?? null)
+
+  // Document upload state
+  const cedulaDocRef     = useRef<HTMLInputElement>(null)
+  const diplomaDocRef    = useRef<HTMLInputElement>(null)
+  const especializDocRef = useRef<HTMLInputElement>(null)
+  const [docUrls,     setDocUrls]     = useState<{ cedula: string | null; diploma: string | null; especializacion: string | null }>({ cedula: null, diploma: null, especializacion: null })
+  const [docSigning,  setDocSigning]  = useState(false)
+  const [uploadingDoc, setUploadingDoc] = useState<string | null>(null)
+  const [docToast,    setDocToast]    = useState<string | null>(null)
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const p = profile as any
+
+  useEffect(() => {
+    async function loadDocUrls() {
+      if (!p?.cedula_url && !p?.diploma_pregrado_url && !p?.diploma_especializacion_url) return
+      setDocSigning(true)
+      const sign = async (path: string | null): Promise<string | null> => {
+        if (!path) return null
+        if (path.startsWith('http')) return path
+        const { data } = await supabase.storage.from('doctor-documents').createSignedUrl(path, 3600)
+        return data?.signedUrl ?? null
+      }
+      const [cedula, diploma, especializacion] = await Promise.all([
+        sign(p.cedula_url ?? null),
+        sign(p.diploma_pregrado_url ?? null),
+        sign(p.diploma_especializacion_url ?? null),
+      ])
+      setDocUrls({ cedula, diploma, especializacion })
+      setDocSigning(false)
+    }
+    loadDocUrls()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.id])
 
   if (profile && !profile.specialty) {
     navigate('/doctor/setup', { replace: true })
@@ -69,6 +103,34 @@ export default function DoctorPerfilPage() {
       await refreshProfile()
     }
     setUploading(false)
+  }
+
+  async function handleDocUpload(file: File, docType: 'cedula' | 'diploma_pregrado' | 'diploma_especializacion') {
+    if (!profile) return
+    if (file.size > 10 * 1024 * 1024) { setDocToast('El archivo no puede superar 10 MB.'); setTimeout(() => setDocToast(null), 3000); return }
+    setUploadingDoc(docType)
+    try {
+      const ext  = file.name.split('.').pop()
+      const path = `${profile.id}/${docType}.${ext}`
+      const { error: upErr } = await supabase.storage.from('doctor-documents').upload(path, file, { upsert: true })
+      if (upErr) throw upErr
+      const colMap: Record<string, string> = {
+        cedula:                  'cedula_url',
+        diploma_pregrado:        'diploma_pregrado_url',
+        diploma_especializacion: 'diploma_especializacion_url',
+      }
+      await supabase.from('profiles').update({ [colMap[docType]]: path }).eq('id', profile.id)
+      const { data: sd } = await supabase.storage.from('doctor-documents').createSignedUrl(path, 3600)
+      const signedUrl = sd?.signedUrl ?? null
+      setDocUrls((prev) => ({ ...prev, [docType === 'cedula' ? 'cedula' : docType === 'diploma_pregrado' ? 'diploma' : 'especializacion']: signedUrl }))
+      await refreshProfile()
+      setDocToast('✅ Documento actualizado correctamente')
+    } catch {
+      setDocToast('Error al subir el documento. Intenta de nuevo.')
+    } finally {
+      setUploadingDoc(null)
+      setTimeout(() => setDocToast(null), 3000)
+    }
   }
 
   const initials = (profile?.full_name ?? profile?.email ?? 'D')[0].toUpperCase()
@@ -193,7 +255,73 @@ export default function DoctorPerfilPage() {
             </div>
           </form>
         </div>
+        {/* Mis documentos */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4">
+          <div>
+            <h2 className="text-base font-bold text-slate-900">Mis documentos</h2>
+            <p className="text-xs text-slate-400 mt-1">Documentos requeridos para tu activación. PDF o imagen, máx. 10 MB.</p>
+          </div>
+
+          {docSigning && (
+            <div className="flex items-center gap-2 text-xs text-slate-400">
+              <div className="w-3 h-3 border-2 border-slate-200 border-t-slate-400 rounded-full animate-spin" />
+              Cargando documentos...
+            </div>
+          )}
+
+          {([
+            { key: 'cedula'                  as const, label: 'Cédula de ciudadanía',       ref: cedulaDocRef,     url: docUrls.cedula,        stored: p?.cedula_url },
+            { key: 'diploma_pregrado'        as const, label: 'Diploma de pregrado',        ref: diplomaDocRef,    url: docUrls.diploma,       stored: p?.diploma_pregrado_url },
+            { key: 'diploma_especializacion' as const, label: 'Diploma de especialización', ref: especializDocRef, url: docUrls.especializacion, stored: p?.diploma_especializacion_url, optional: true },
+          ]).map(({ key, label, ref, url, stored, optional }) => (
+            <div key={key} className="flex items-center justify-between gap-4 py-3 border-b border-slate-100 last:border-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-base">📄</span>
+                <div>
+                  <span className="text-sm font-medium text-slate-700">{label}</span>
+                  {optional && <span className="text-xs text-slate-400 ml-1">(opcional)</span>}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {stored ? (
+                  <>
+                    <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">✓ Subido</span>
+                    {url && (
+                      <a href={url} target="_blank" rel="noopener noreferrer"
+                        className="text-xs px-2.5 py-1 rounded-lg border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors font-medium">
+                        Ver →
+                      </a>
+                    )}
+                  </>
+                ) : (
+                  <span className="text-xs text-amber-600 font-medium bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">Pendiente</span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => ref.current?.click()}
+                  disabled={uploadingDoc === key}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors font-medium disabled:opacity-50"
+                >
+                  {uploadingDoc === key ? 'Subiendo...' : stored ? 'Reemplazar' : 'Subir'}
+                </button>
+                <input
+                  ref={ref}
+                  type="file"
+                  accept="image/*,application/pdf"
+                  className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) handleDocUpload(f, key) }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
       </main>
+
+      {docToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white text-sm font-medium px-5 py-3 rounded-2xl shadow-lg">
+          {docToast}
+        </div>
+      )}
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
@@ -53,6 +53,30 @@ function EyeIcon({ open }: { open: boolean }) {
   )
 }
 
+function DocFileField({ label, helper, file, inputRef, optional, onChange }: {
+  label: string; helper: string; file: File | null
+  inputRef: React.RefObject<HTMLInputElement>; optional?: boolean
+  onChange: (f: File) => void
+}) {
+  return (
+    <div>
+      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-0.5">
+        {label}{optional && <span className="normal-case font-normal text-slate-400 ml-1">(opcional)</span>}
+      </p>
+      <p className="text-xs text-slate-400 mb-1.5">{helper}</p>
+      <div className="flex items-center gap-2 flex-wrap">
+        <button type="button" onClick={() => inputRef.current?.click()}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors">
+          📎 {file ? 'Cambiar archivo' : 'Seleccionar archivo'}
+        </button>
+        {file && <span className="text-xs text-emerald-700 font-medium truncate max-w-[160px]">✓ {file.name}</span>}
+        <input ref={inputRef} type="file" accept="image/*,application/pdf" className="hidden"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) onChange(f); e.target.value = '' }} />
+      </div>
+    </div>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────
 
 type Mode = 'select' | 'patient' | 'doctor'
@@ -96,6 +120,15 @@ export default function RegistroPage() {
   const [specialty,   setSpecialty]   = useState('')
   const [university,  setUniversity]  = useState('')
   const [medLicense,  setMedLicense]  = useState('')
+
+  // Doctor document uploads
+  const cedulaRef       = useRef<HTMLInputElement>(null)
+  const diplomaRef      = useRef<HTMLInputElement>(null)
+  const especializRef   = useRef<HTMLInputElement>(null)
+  const [cedulaFile,      setCedulaFile]      = useState<File | null>(null)
+  const [diplomaFile,     setDiplomaFile]     = useState<File | null>(null)
+  const [especializFile,  setEspecializFile]  = useState<File | null>(null)
+  const [hasEspecializ,   setHasEspecializ]   = useState(false)
 
   useEffect(() => {
     if (!loading && profile) navigate(roleHome[profile.role], { replace: true })
@@ -231,9 +264,11 @@ export default function RegistroPage() {
     e.preventDefault()
     setError(null)
     setEmailExists(false)
-    if (!specialty)    { setError('Selecciona tu especialidad.'); return }
+    if (!specialty)         { setError('Selecciona tu especialidad.'); return }
     if (!university.trim()) { setError('Ingresa tu universidad de pregrado.'); return }
     if (!medLicense.trim()) { setError('Ingresa tu número de tarjeta profesional.'); return }
+    if (!cedulaFile)        { setError('Sube tu cédula de ciudadanía.'); return }
+    if (!diplomaFile)       { setError('Sube tu diploma de pregrado.'); return }
     if (!validateBase()) return
     setSubmitting(true)
 
@@ -273,6 +308,31 @@ export default function RegistroPage() {
       setError('Cuenta creada, pero hubo un error al guardar el perfil. Intenta iniciar sesión.')
       setSubmitting(false); return
     }
+
+    // Upload documents (non-blocking — registration completes even if uploads fail)
+    try {
+      const userId = signUpData.user.id
+      const uploadDoc = async (file: File | null, docType: string): Promise<string | null> => {
+        if (!file) return null
+        if (file.size > 10 * 1024 * 1024) return null
+        const ext = file.name.split('.').pop()
+        const path = `${userId}/${docType}.${ext}`
+        const { error: upErr } = await supabase.storage.from('doctor-documents').upload(path, file, { upsert: true })
+        return upErr ? null : path
+      }
+      const [cedulaPath, diplomaPath, especializPath] = await Promise.all([
+        uploadDoc(cedulaFile, 'cedula'),
+        uploadDoc(diplomaFile, 'diploma_pregrado'),
+        uploadDoc(hasEspecializ ? especializFile : null, 'diploma_especializacion'),
+      ])
+      const docUpdate: Record<string, string> = {}
+      if (cedulaPath)      docUpdate.cedula_url                  = cedulaPath
+      if (diplomaPath)     docUpdate.diploma_pregrado_url        = diplomaPath
+      if (especializPath)  docUpdate.diploma_especializacion_url = especializPath
+      if (Object.keys(docUpdate).length > 0) {
+        await supabase.from('profiles').update(docUpdate).eq('id', userId)
+      }
+    } catch { /* non-blocking */ }
 
     // Notify admin
     try {
@@ -416,6 +476,46 @@ export default function RegistroPage() {
                   <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><IdIcon /></span>
                   <p className="mt-1 text-xs text-slate-400">Tu número de registro médico en Colombia</p>
                 </Field>
+
+                {/* Document uploads */}
+                <div className="pt-2 border-t border-slate-100">
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Documentos</p>
+                  <p className="text-xs text-slate-400 mb-4">PDF o imagen, máx. 10 MB por archivo.</p>
+                  <div className="space-y-4">
+                    <DocFileField
+                      label="Cédula de ciudadanía"
+                      helper="Sube una foto o PDF de tu documento de identidad"
+                      file={cedulaFile}
+                      inputRef={cedulaRef}
+                      onChange={setCedulaFile}
+                    />
+                    <DocFileField
+                      label="Diploma de pregrado"
+                      helper="Diploma o acta de grado de medicina"
+                      file={diplomaFile}
+                      inputRef={diplomaRef}
+                      onChange={setDiplomaFile}
+                    />
+                    <div>
+                      <label className="flex items-center gap-2 cursor-pointer mb-3">
+                        <input type="checkbox" checked={hasEspecializ}
+                          onChange={(e) => setHasEspecializ(e.target.checked)}
+                          className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
+                        <span className="text-xs font-semibold text-slate-600">Tengo especialización médica</span>
+                      </label>
+                      {hasEspecializ && (
+                        <DocFileField
+                          label="Diploma de especialización"
+                          helper="Diploma o acta de grado de tu especialización"
+                          file={especializFile}
+                          inputRef={especializRef}
+                          optional
+                          onChange={setEspecializFile}
+                        />
+                      )}
+                    </div>
+                  </div>
+                </div>
               </>
             )}
 
