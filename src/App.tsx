@@ -47,7 +47,6 @@ import LabPerfilPage      from './pages/lab/PerfilPage'
 
 // Onboarding
 import PatientOnboarding from './components/onboarding/PatientOnboarding'
-import DoctorOnboarding  from './components/onboarding/DoctorOnboarding'
 
 export default function App() {
   return (
@@ -80,7 +79,6 @@ export default function App() {
       {/* Doctor routes */}
       <Route element={<RequireRole role="doctor" />}>
         <Route path="/doctor/pending"    element={<DoctorPendingPage />} />
-        <Route path="/doctor/onboarding" element={<DoctorOnboarding />} />
         <Route path="/doctor/setup"    element={<DoctorSetupPage />} />
         <Route path="/doctor/perfil"   element={<DoctorPerfilPage />} />
         <Route path="/doctor/agenda"   element={<DoctorAgendaPage />} />

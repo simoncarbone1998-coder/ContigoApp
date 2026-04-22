@@ -3,37 +3,90 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import NavBar from '../../components/NavBar'
-import { specialtyLabel } from '../../lib/types'
+import { SPECIALTIES, specialtyLabel } from '../../lib/types'
+import type { Specialty } from '../../lib/types'
+
+interface CrForm {
+  full_name: string
+  phone: string
+  specialty: Specialty | ''
+  undergraduate_university: string
+  medical_license: string
+  doctor_description: string
+  bio: string
+}
+
+function ReadField({ label, value, span2 }: { label: string; value: string | null | undefined; span2?: boolean }) {
+  return (
+    <div className={span2 ? 'sm:col-span-2' : ''}>
+      <dt className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">{label}</dt>
+      <dd className={`text-sm ${value ? 'text-slate-900' : 'text-slate-400 italic'}`}>{value || 'No registrado'}</dd>
+    </div>
+  )
+}
+
+function DocFileChip({ label, file, inputRef, onChange }: {
+  label: string
+  file: File | null
+  inputRef: React.RefObject<HTMLInputElement>
+  onChange: (f: File) => void
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
+      <div>
+        <p className="text-sm font-medium text-slate-700">{label}</p>
+        {file && <p className="text-xs text-emerald-600 mt-0.5">✓ {file.name}</p>}
+      </div>
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors font-medium shrink-0"
+      >
+        {file ? 'Cambiar' : 'Adjuntar'}
+      </button>
+      <input ref={inputRef} type="file" accept="image/*,application/pdf" className="hidden"
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) onChange(f) }} />
+    </div>
+  )
+}
 
 export default function DoctorPerfilPage() {
   const { profile, refreshProfile } = useAuth()
   const navigate = useNavigate()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const p = profile as any
 
-  const [fullName, setFullName]                         = useState(profile?.full_name ?? '')
-  const [phone, setPhone]                               = useState(profile?.phone ?? '')
-  const [birthDate, setBirthDate]                       = useState(profile?.birth_date ?? '')
-  const [city, setCity]                                 = useState(profile?.city ?? '')
-  const [undergrad, setUndergrad]                       = useState(profile?.undergraduate_university ?? '')
-  const [postgrad, setPostgrad]                         = useState(profile?.postgraduate_specialty ?? '')
-  const [doctorDescription, setDoctorDescription]       = useState(profile?.doctor_description ?? '')
-  const [saving, setSaving]       = useState(false)
-  const [saveMsg, setSaveMsg]     = useState<{ ok: boolean; text: string } | null>(null)
-
+  // Avatar
   const fileRef = useRef<HTMLInputElement>(null)
-  const [uploading, setUploading] = useState(false)
-  const [avatarUrl, setAvatarUrl] = useState(profile?.avatar_url ?? null)
+  const [uploading, setUploading]   = useState(false)
+  const [avatarUrl, setAvatarUrl]   = useState(profile?.avatar_url ?? null)
 
-  // Document upload state
+  // Document URLs
   const cedulaDocRef     = useRef<HTMLInputElement>(null)
   const diplomaDocRef    = useRef<HTMLInputElement>(null)
   const especializDocRef = useRef<HTMLInputElement>(null)
-  const [docUrls,     setDocUrls]     = useState<{ cedula: string | null; diploma: string | null; especializacion: string | null }>({ cedula: null, diploma: null, especializacion: null })
-  const [docSigning,  setDocSigning]  = useState(false)
+  const [docUrls,      setDocUrls]      = useState<{ cedula: string | null; diploma: string | null; especializacion: string | null }>({ cedula: null, diploma: null, especializacion: null })
+  const [docSigning,   setDocSigning]   = useState(false)
   const [uploadingDoc, setUploadingDoc] = useState<string | null>(null)
-  const [docToast,    setDocToast]    = useState<string | null>(null)
+  const [docToast,     setDocToast]     = useState<string | null>(null)
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const p = profile as any
+  // Pending change request check
+  const [pendingRequest,   setPendingRequest]   = useState<{ id: string; created_at: string } | null>(null)
+  const [loadingPending,   setLoadingPending]   = useState(true)
+
+  // Change request modal
+  const [showModal,        setShowModal]        = useState(false)
+  const [crForm,           setCrForm]           = useState<CrForm>({ full_name: '', phone: '', specialty: '', undergraduate_university: '', medical_license: '', doctor_description: '', bio: '' })
+  const [showDocToggle,    setShowDocToggle]    = useState(false)
+  const [crCedulaFile,     setCrCedulaFile]     = useState<File | null>(null)
+  const [crDiplomaFile,    setCrDiplomaFile]    = useState<File | null>(null)
+  const [crEspecializFile, setCrEspecializFile] = useState<File | null>(null)
+  const crCedulaRef     = useRef<HTMLInputElement>(null)
+  const crDiplomaRef    = useRef<HTMLInputElement>(null)
+  const crEspecializRef = useRef<HTMLInputElement>(null)
+  const [crReason,    setCrReason]    = useState('')
+  const [crSubmitting, setCrSubmitting] = useState(false)
+  const [crToast,      setCrToast]     = useState<string | null>(null)
 
   useEffect(() => {
     async function loadDocUrls() {
@@ -46,9 +99,7 @@ export default function DoctorPerfilPage() {
         return data?.signedUrl ?? null
       }
       const [cedula, diploma, especializacion] = await Promise.all([
-        sign(p.cedula_url ?? null),
-        sign(p.diploma_pregrado_url ?? null),
-        sign(p.diploma_especializacion_url ?? null),
+        sign(p.cedula_url ?? null), sign(p.diploma_pregrado_url ?? null), sign(p.diploma_especializacion_url ?? null),
       ])
       setDocUrls({ cedula, diploma, especializacion })
       setDocSigning(false)
@@ -57,42 +108,52 @@ export default function DoctorPerfilPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.id])
 
+  useEffect(() => {
+    async function checkPending() {
+      if (!profile?.id) return
+      setLoadingPending(true)
+      const { data } = await supabase
+        .from('doctor_change_requests')
+        .select('id, created_at')
+        .eq('doctor_id', profile.id)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      setPendingRequest(data ?? null)
+      setLoadingPending(false)
+    }
+    checkPending()
+  }, [profile?.id])
+
   if (profile && !profile.specialty) {
     navigate('/doctor/setup', { replace: true })
     return null
   }
 
-  async function handleSave(e: React.FormEvent) {
-    e.preventDefault()
-    if (!profile) return
-    setSaving(true)
-    setSaveMsg(null)
-    const { error } = await supabase
-      .from('profiles')
-      .update({
-        full_name:               fullName.trim(),
-        phone:                   phone.trim() || null,
-        birth_date:              birthDate || null,
-        city:                    city.trim() || null,
-        undergraduate_university: undergrad.trim() || null,
-        postgraduate_specialty:   postgrad.trim() || null,
-        doctor_description:       doctorDescription.trim() || null,
-      })
-      .eq('id', profile.id)
-    if (error) {
-      setSaveMsg({ ok: false, text: 'No se pudo guardar. Intenta de nuevo.' })
-    } else {
-      await refreshProfile()
-      setSaveMsg({ ok: true, text: 'Perfil actualizado.' })
-    }
-    setSaving(false)
+  function openModal() {
+    setCrForm({
+      full_name:                p?.full_name ?? '',
+      phone:                    p?.phone ?? '',
+      specialty:                p?.specialty ?? '',
+      undergraduate_university: p?.undergraduate_university ?? '',
+      medical_license:          p?.medical_license ?? '',
+      doctor_description:       p?.doctor_description ?? '',
+      bio:                      p?.bio ?? '',
+    })
+    setCrReason('')
+    setShowDocToggle(false)
+    setCrCedulaFile(null)
+    setCrDiplomaFile(null)
+    setCrEspecializFile(null)
+    setShowModal(true)
   }
 
   async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file || !profile) return
     setUploading(true)
-    const ext = file.name.split('.').pop()
+    const ext  = file.name.split('.').pop()
     const path = `${profile.id}/avatar.${ext}`
     const { error: upErr } = await supabase.storage.from('avatars').upload(path, file, { upsert: true })
     if (!upErr) {
@@ -115,14 +176,14 @@ export default function DoctorPerfilPage() {
       const { error: upErr } = await supabase.storage.from('doctor-documents').upload(path, file, { upsert: true })
       if (upErr) throw upErr
       const colMap: Record<string, string> = {
-        cedula:                  'cedula_url',
-        diploma_pregrado:        'diploma_pregrado_url',
-        diploma_especializacion: 'diploma_especializacion_url',
+        cedula: 'cedula_url', diploma_pregrado: 'diploma_pregrado_url', diploma_especializacion: 'diploma_especializacion_url',
       }
       await supabase.from('profiles').update({ [colMap[docType]]: path }).eq('id', profile.id)
       const { data: sd } = await supabase.storage.from('doctor-documents').createSignedUrl(path, 3600)
-      const signedUrl = sd?.signedUrl ?? null
-      setDocUrls((prev) => ({ ...prev, [docType === 'cedula' ? 'cedula' : docType === 'diploma_pregrado' ? 'diploma' : 'especializacion']: signedUrl }))
+      setDocUrls((prev) => ({
+        ...prev,
+        [docType === 'cedula' ? 'cedula' : docType === 'diploma_pregrado' ? 'diploma' : 'especializacion']: sd?.signedUrl ?? null,
+      }))
       await refreshProfile()
       setDocToast('✅ Documento actualizado correctamente')
     } catch {
@@ -130,6 +191,71 @@ export default function DoctorPerfilPage() {
     } finally {
       setUploadingDoc(null)
       setTimeout(() => setDocToast(null), 3000)
+    }
+  }
+
+  async function handleSubmitChangeRequest(e: React.FormEvent) {
+    e.preventDefault()
+    if (!profile) return
+    setCrSubmitting(true)
+    try {
+      const uploadDoc = async (file: File | null, docType: string): Promise<string | null> => {
+        if (!file) return null
+        const ext  = file.name.split('.').pop()
+        const path = `${profile.id}/cr_${docType}.${ext}`
+        const { error } = await supabase.storage.from('doctor-documents').upload(path, file, { upsert: true })
+        return error ? null : path
+      }
+
+      const [newCedulaPath, newDiplomaPath, newEspecializPath] = await Promise.all([
+        uploadDoc(crCedulaFile, 'cedula'),
+        uploadDoc(crDiplomaFile, 'diploma_pregrado'),
+        uploadDoc(crEspecializFile, 'diploma_especializacion'),
+      ])
+
+      // Only include fields that actually changed
+      const changes: Record<string, string> = {}
+      ;(Object.keys(crForm) as (keyof CrForm)[]).forEach((key) => {
+        const newVal = crForm[key]
+        const oldVal = (p?.[key] ?? '') as string
+        if (newVal !== oldVal) changes[key] = newVal
+      })
+
+      const { data: req, error: insertErr } = await supabase
+        .from('doctor_change_requests')
+        .insert({
+          doctor_id:               profile.id,
+          requested_changes:       changes,
+          new_cedula_url:          newCedulaPath,
+          new_diploma_url:         newDiplomaPath,
+          new_especializacion_url: newEspecializPath,
+          change_reason:           crReason.trim() || null,
+        })
+        .select('id, created_at')
+        .single()
+
+      if (insertErr) throw insertErr
+
+      try {
+        const fieldNames = Object.keys(changes)
+        await supabase.functions.invoke('send-email', {
+          body: {
+            to:      'simoncarbone1998@gmail.com',
+            subject: `📋 Solicitud de cambio de información — Dr(a). ${profile.full_name}`,
+            html:    `<p>El Dr(a). <strong>${profile.full_name}</strong> ha enviado una solicitud de cambio de información.</p>${fieldNames.length > 0 ? `<p><strong>Campos a cambiar:</strong> ${fieldNames.join(', ')}</p>` : ''}${crReason.trim() ? `<p><strong>Motivo:</strong> ${crReason.trim()}</p>` : ''}<br/><p>Revisa la solicitud en el panel de administración.</p>`,
+          },
+        })
+      } catch { /* non-critical */ }
+
+      setPendingRequest({ id: req.id, created_at: req.created_at })
+      setShowModal(false)
+      setCrToast('Tu solicitud fue enviada. Te notificaremos cuando sea revisada.')
+      setTimeout(() => setCrToast(null), 5000)
+    } catch {
+      setCrToast('Error al enviar la solicitud. Intenta de nuevo.')
+      setTimeout(() => setCrToast(null), 4000)
+    } finally {
+      setCrSubmitting(false)
     }
   }
 
@@ -145,8 +271,16 @@ export default function DoctorPerfilPage() {
           <p className="text-slate-500 text-sm mt-1">Tu información visible para pacientes.</p>
         </div>
 
+        {!loadingPending && pendingRequest && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center gap-2.5">
+            <span className="text-amber-500 text-lg">⏳</span>
+            <p className="text-sm text-amber-800 font-medium">Tienes una solicitud de cambio pendiente de revisión.</p>
+          </div>
+        )}
+
+        {/* Profile info card */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-          {/* Avatar + specialty */}
+          {/* Avatar */}
           <div className="flex items-center gap-5 mb-6 pb-6 border-b border-slate-100">
             <div className="relative">
               {avatarUrl ? (
@@ -178,84 +312,35 @@ export default function DoctorPerfilPage() {
             </div>
           </div>
 
-          {saveMsg && (
-            <div className={`mb-4 p-3 rounded-xl text-sm ${saveMsg.ok ? 'bg-emerald-50 border border-emerald-200 text-emerald-800' : 'bg-red-50 border border-red-200 text-red-700'}`}>
-              {saveMsg.text}
-            </div>
-          )}
+          {/* Read-only fields */}
+          <dl className="grid sm:grid-cols-2 gap-x-8 gap-y-5">
+            <ReadField label="Nombre completo"         value={p?.full_name}                span2 />
+            <ReadField label="Teléfono"                value={p?.phone} />
+            <ReadField label="Especialidad"            value={specialtyLabel(p?.specialty)} />
+            <ReadField label="Universidad de pregrado" value={p?.undergraduate_university}  span2 />
+            <ReadField label="Tarjeta profesional"     value={p?.medical_license} />
+            <ReadField label="Descripción profesional" value={p?.doctor_description}        span2 />
+            <ReadField label="Bio"                     value={p?.bio}                       span2 />
+          </dl>
 
-          <form onSubmit={handleSave} className="grid sm:grid-cols-2 gap-4">
-
-            {/* Personal info */}
-            <div className="sm:col-span-2">
-              <label htmlFor="fullName" className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Nombre completo</label>
-              <input id="fullName" type="text" value={fullName} onChange={(e) => setFullName(e.target.value)}
-                className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors" />
-            </div>
-
+          <div className="mt-6 pt-5 border-t border-slate-100 flex flex-col gap-2">
             <div>
-              <label htmlFor="phone" className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Teléfono</label>
-              <input id="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
-                className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors" />
-            </div>
-
-            <div>
-              <label htmlFor="city" className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Ciudad</label>
-              <input id="city" type="text" value={city} onChange={(e) => setCity(e.target.value)}
-                placeholder="Bogotá, Medellín..."
-                className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors" />
-            </div>
-
-            <div>
-              <label htmlFor="birthDate" className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Fecha de nacimiento</label>
-              <input id="birthDate" type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)}
-                className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors" />
-            </div>
-
-            {/* Separator */}
-            <div className="sm:col-span-2 pt-2 border-t border-slate-100">
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Formación académica</p>
-            </div>
-
-            <div>
-              <label htmlFor="undergrad" className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Universidad de pregrado</label>
-              <input id="undergrad" type="text" value={undergrad} onChange={(e) => setUndergrad(e.target.value)}
-                placeholder="Universidad Nacional de Colombia"
-                className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors" />
-            </div>
-
-            <div>
-              <label htmlFor="postgrad" className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Especialización de posgrado</label>
-              <input id="postgrad" type="text" value={postgrad} onChange={(e) => setPostgrad(e.target.value)}
-                placeholder="No aplica"
-                className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors" />
-            </div>
-
-            <div className="sm:col-span-2">
-              <label htmlFor="doctorDesc" className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Descripción profesional</label>
-              <textarea id="doctorDesc" value={doctorDescription} onChange={(e) => setDoctorDescription(e.target.value)}
-                rows={4} placeholder="Cuéntale a tus pacientes sobre tu experiencia y enfoque médico..."
-                className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors resize-none" />
-            </div>
-
-            {/* Specialty (read-only) */}
-            <div className="sm:col-span-2">
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Especialidad médica</p>
-              <p className="text-sm text-slate-600 bg-slate-50 border border-slate-100 rounded-xl px-3.5 py-2.5">
-                {specialtyLabel(profile?.specialty ?? null)}
-              </p>
-              <p className="text-xs text-slate-400 mt-1">La especialidad no se puede cambiar una vez configurada.</p>
-            </div>
-
-            <div className="sm:col-span-2">
-              <button type="submit" disabled={saving}
-                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-50 shadow-sm shadow-blue-100">
-                {saving ? 'Guardando...' : 'Guardar cambios'}
+              <button
+                type="button"
+                onClick={openModal}
+                disabled={!!pendingRequest || loadingPending}
+                className="px-5 py-2.5 rounded-xl border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {pendingRequest ? 'Solicitud pendiente de revisión' : 'Solicitar cambio de información →'}
               </button>
             </div>
-          </form>
+            {pendingRequest && (
+              <p className="text-xs text-slate-400">No puedes enviar otra solicitud mientras una está pendiente de revisión.</p>
+            )}
+          </div>
         </div>
-        {/* Mis documentos */}
+
+        {/* Documents card */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4">
           <div>
             <h2 className="text-base font-bold text-slate-900">Mis documentos</h2>
@@ -270,8 +355,8 @@ export default function DoctorPerfilPage() {
           )}
 
           {([
-            { key: 'cedula'                  as const, label: 'Cédula de ciudadanía',       ref: cedulaDocRef,     url: docUrls.cedula,        stored: p?.cedula_url },
-            { key: 'diploma_pregrado'        as const, label: 'Diploma de pregrado',        ref: diplomaDocRef,    url: docUrls.diploma,       stored: p?.diploma_pregrado_url },
+            { key: 'cedula'                  as const, label: 'Cédula de ciudadanía',       ref: cedulaDocRef,     url: docUrls.cedula,         stored: p?.cedula_url },
+            { key: 'diploma_pregrado'        as const, label: 'Diploma de pregrado',        ref: diplomaDocRef,    url: docUrls.diploma,        stored: p?.diploma_pregrado_url },
             { key: 'diploma_especializacion' as const, label: 'Diploma de especialización', ref: especializDocRef, url: docUrls.especializacion, stored: p?.diploma_especializacion_url, optional: true },
           ]).map(({ key, label, ref, url, stored, optional }) => (
             <div key={key} className="flex items-center justify-between gap-4 py-3 border-b border-slate-100 last:border-0">
@@ -304,22 +389,123 @@ export default function DoctorPerfilPage() {
                 >
                   {uploadingDoc === key ? 'Subiendo...' : stored ? 'Reemplazar' : 'Subir'}
                 </button>
-                <input
-                  ref={ref}
-                  type="file"
-                  accept="image/*,application/pdf"
-                  className="hidden"
-                  onChange={(e) => { const f = e.target.files?.[0]; if (f) handleDocUpload(f, key) }}
-                />
+                <input ref={ref} type="file" accept="image/*,application/pdf" className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) handleDocUpload(f, key) }} />
               </div>
             </div>
           ))}
         </div>
       </main>
 
-      {docToast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white text-sm font-medium px-5 py-3 rounded-2xl shadow-lg">
-          {docToast}
+      {/* Change request modal */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl w-full max-w-xl my-8">
+            <div className="px-6 pt-6 pb-4 border-b border-slate-100">
+              <h2 className="text-lg font-bold text-slate-900">Solicitud de cambio de información</h2>
+              <p className="text-sm text-slate-500 mt-1">Los cambios serán revisados por el equipo de Contigo antes de aplicarse.</p>
+            </div>
+
+            <form onSubmit={handleSubmitChangeRequest} className="px-6 py-5 space-y-4">
+              {/* Name */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Nombre completo</label>
+                <input type="text" value={crForm.full_name} onChange={(e) => setCrForm((f) => ({ ...f, full_name: e.target.value }))}
+                  className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors" />
+              </div>
+
+              {/* Phone + Specialty */}
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Teléfono</label>
+                  <input type="tel" value={crForm.phone} onChange={(e) => setCrForm((f) => ({ ...f, phone: e.target.value }))}
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Especialidad</label>
+                  <select value={crForm.specialty} onChange={(e) => setCrForm((f) => ({ ...f, specialty: e.target.value as Specialty }))}
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors bg-white">
+                    <option value="">Seleccionar...</option>
+                    {SPECIALTIES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {/* University + License */}
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Universidad de pregrado</label>
+                  <input type="text" value={crForm.undergraduate_university} onChange={(e) => setCrForm((f) => ({ ...f, undergraduate_university: e.target.value }))}
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Tarjeta profesional</label>
+                  <input type="text" value={crForm.medical_license} onChange={(e) => setCrForm((f) => ({ ...f, medical_license: e.target.value }))}
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors" />
+                </div>
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Descripción profesional</label>
+                <textarea value={crForm.doctor_description} onChange={(e) => setCrForm((f) => ({ ...f, doctor_description: e.target.value }))}
+                  rows={3} placeholder="Experiencia y enfoque médico..."
+                  className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors resize-none" />
+              </div>
+
+              {/* Bio */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Bio</label>
+                <textarea value={crForm.bio} onChange={(e) => setCrForm((f) => ({ ...f, bio: e.target.value }))}
+                  rows={2} placeholder="Breve presentación..."
+                  className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors resize-none" />
+              </div>
+
+              {/* Document uploads toggle */}
+              <div className="border border-slate-200 rounded-xl overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setShowDocToggle((v) => !v)}
+                  className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  <span>¿Necesitas actualizar algún documento?</span>
+                  <span className="text-slate-400 text-xs">{showDocToggle ? '▲ Ocultar' : '▼ Mostrar'}</span>
+                </button>
+                {showDocToggle && (
+                  <div className="px-4 pb-4 space-y-3 border-t border-slate-100 pt-3">
+                    <DocFileChip label="Cédula de ciudadanía (opcional)"       file={crCedulaFile}     inputRef={crCedulaRef}     onChange={setCrCedulaFile} />
+                    <DocFileChip label="Diploma de pregrado (opcional)"        file={crDiplomaFile}    inputRef={crDiplomaRef}    onChange={setCrDiplomaFile} />
+                    <DocFileChip label="Diploma de especialización (opcional)" file={crEspecializFile} inputRef={crEspecializRef} onChange={setCrEspecializFile} />
+                  </div>
+                )}
+              </div>
+
+              {/* Reason */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Motivo del cambio (opcional)</label>
+                <textarea value={crReason} onChange={(e) => setCrReason(e.target.value)}
+                  rows={2} placeholder="Ej: Actualicé mi especialización, cambié de universidad, etc."
+                  className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors resize-none" />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+                <button type="button" onClick={() => setShowModal(false)}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition-colors">
+                  Cancelar
+                </button>
+                <button type="submit" disabled={crSubmitting}
+                  className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors disabled:opacity-50">
+                  {crSubmitting ? 'Enviando...' : 'Enviar solicitud'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {(docToast || crToast) && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white text-sm font-medium px-5 py-3 rounded-2xl shadow-lg whitespace-pre-line text-center">
+          {docToast || crToast}
         </div>
       )}
     </div>

@@ -12,7 +12,6 @@ const roleHome: Record<Role, string> = {
 
 const onboardingPath: Record<string, string> = {
   patient: '/paciente/onboarding',
-  doctor:  '/doctor/onboarding',
 }
 
 export default function RequireRole({ role }: { role: Role }) {
