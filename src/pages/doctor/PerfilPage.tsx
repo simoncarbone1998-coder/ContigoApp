@@ -28,7 +28,7 @@ function ReadField({ label, value, span2 }: { label: string; value: string | nul
 function DocFileChip({ label, file, inputRef, onChange }: {
   label: string
   file: File | null
-  inputRef: React.RefObject<HTMLInputElement>
+  inputRef: React.RefObject<HTMLInputElement | null>
   onChange: (f: File) => void
 }) {
   return (

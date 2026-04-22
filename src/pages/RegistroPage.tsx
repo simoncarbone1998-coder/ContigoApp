@@ -55,7 +55,7 @@ function EyeIcon({ open }: { open: boolean }) {
 
 function DocFileField({ label, helper, file, inputRef, optional, onChange }: {
   label: string; helper: string; file: File | null
-  inputRef: React.RefObject<HTMLInputElement>; optional?: boolean
+  inputRef: React.RefObject<HTMLInputElement | null>; optional?: boolean
   onChange: (f: File) => void
 }) {
   return (
