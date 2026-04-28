@@ -1,9 +1,11 @@
 import { useAuth } from '../../contexts/AuthContext'
+import { useTranslation } from 'react-i18next'
 
 const BG = { background: 'linear-gradient(135deg, #1e3a5f 0%, #16a34a 100%)' }
 
 export default function RejectedApplicationPage() {
   const { signOut } = useAuth()
+  const { t } = useTranslation()
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-12" style={BG}>
@@ -22,17 +24,16 @@ export default function RejectedApplicationPage() {
             </svg>
           </div>
 
-          <h1 className="text-xl font-bold text-slate-900 mb-3">Tu aplicación no fue aprobada</h1>
+          <h1 className="text-xl font-bold text-slate-900 mb-3">{t('patient.rejected.title')}</h1>
 
-          <p className="text-slate-500 text-sm leading-relaxed mb-6">
-            Tu aplicación no fue aprobada.<br />
-            Revisa tu correo electrónico para más detalles.
+          <p className="text-slate-500 text-sm leading-relaxed mb-6 whitespace-pre-line">
+            {t('patient.rejected.text')}
           </p>
 
           <p className="text-xs text-slate-400 mb-6">
-            ¿Tienes preguntas?{' '}
+            {t('common.questions')}{' '}
             <a href="mailto:hola@contigomedicina.com" className="text-blue-600 hover:underline font-medium">
-              hola@contigomedicina.com
+              {t('common.contactEmail')}
             </a>
           </p>
 
@@ -40,7 +41,7 @@ export default function RejectedApplicationPage() {
             onClick={signOut}
             className="w-full py-3 rounded-xl border-2 border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
           >
-            Cerrar sesión
+            {t('patient.rejected.signOut')}
           </button>
         </div>
       </div>

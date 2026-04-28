@@ -2,18 +2,21 @@ import { useState } from 'react'
 import { NavLink, Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useLabContext } from '../contexts/LabContext'
-
-const NAV_LINKS = [
-  { to: '/lab/dashboard', label: 'Dashboard' },
-  { to: '/lab/ordenes',   label: 'Órdenes' },
-  { to: '/lab/agenda',    label: 'Agenda' },
-  { to: '/lab/historial', label: 'Historial' },
-]
+import { useTranslation } from 'react-i18next'
+import LanguageToggle from './LanguageToggle'
 
 export default function LabNavBar() {
   const { lab }  = useLabContext()
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [mobileOpen, setMobileOpen] = useState(false)
+
+  const NAV_LINKS = [
+    { to: '/lab/dashboard', labelKey: 'lab.nav.dashboard' },
+    { to: '/lab/ordenes',   labelKey: 'lab.nav.orders' },
+    { to: '/lab/agenda',    labelKey: 'lab.nav.agenda' },
+    { to: '/lab/historial', labelKey: 'lab.nav.history' },
+  ]
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -30,7 +33,7 @@ export default function LabNavBar() {
           <span className="hidden sm:flex items-center gap-1.5">
             <span className="text-slate-300">|</span>
             <span className="text-xs font-bold px-2 py-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
-              Portal Aliados
+              {t('nav.portalAliados')}
             </span>
           </span>
         </Link>
@@ -49,13 +52,15 @@ export default function LabNavBar() {
                 }`
               }
             >
-              {link.label}
+              {t(link.labelKey)}
             </NavLink>
           ))}
         </nav>
 
         {/* Right */}
         <div className="flex items-center gap-3 shrink-0">
+          <LanguageToggle />
+
           {lab && (
             <div className="hidden sm:flex flex-col items-end">
               <span className="text-xs font-semibold text-slate-800 truncate max-w-36">{lab.name}</span>
@@ -70,7 +75,7 @@ export default function LabNavBar() {
               }`
             }
           >
-            Perfil
+            {t('lab.nav.profile')}
           </NavLink>
           <button
             onClick={handleLogout}
@@ -79,7 +84,7 @@ export default function LabNavBar() {
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
             </svg>
-            Salir
+            {t('lab.nav.signOut')}
           </button>
 
           {/* Mobile hamburger */}
@@ -115,7 +120,7 @@ export default function LabNavBar() {
                   }`
                 }
               >
-                {link.label}
+                {t(link.labelKey)}
               </NavLink>
             ))}
             <NavLink to="/lab/perfil" onClick={() => setMobileOpen(false)}
@@ -125,12 +130,12 @@ export default function LabNavBar() {
                 }`
               }
             >
-              Perfil
+              {t('lab.nav.profile')}
             </NavLink>
             <div className="border-t border-slate-100 mt-2 pt-2">
               <button onClick={handleLogout}
                 className="w-full text-left px-4 py-3 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 transition-colors">
-                Cerrar sesión
+                {t('lab.nav.signOut')}
               </button>
             </div>
           </nav>

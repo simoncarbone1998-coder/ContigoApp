@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useLabContext } from '../../contexts/LabContext'
 import LabNavBar from '../../components/LabNavBar'
+import { useTranslation } from 'react-i18next'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Order = any
@@ -16,6 +17,7 @@ function formatDate(d: string) {
 
 export default function LabOrdenesPage() {
   const { lab: session } = useLabContext()
+  const { t } = useTranslation()
   const [orders,   setOrders]   = useState<Order[]>([])
   const [loading,  setLoading]  = useState(true)
   const [slots,    setSlots]    = useState<Slot[]>([])
@@ -111,7 +113,7 @@ export default function LabOrdenesPage() {
 
       <main className="max-w-5xl mx-auto px-4 py-8 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Órdenes pendientes de agendar</h1>
+          <h1 className="text-2xl font-bold text-slate-900">{t('lab.orders.title')}</h1>
           <p className="text-slate-500 text-sm mt-1">Pacientes con órdenes médicas que coinciden con tus servicios.</p>
         </div>
 
@@ -123,7 +125,7 @@ export default function LabOrdenesPage() {
           ) : orders.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-3xl mb-3">🎉</p>
-              <p className="text-slate-600 font-medium">No hay órdenes pendientes</p>
+              <p className="text-slate-600 font-medium">{t('lab.orders.noPending')}</p>
               <p className="text-slate-400 text-sm mt-1">Todas las órdenes han sido agendadas.</p>
             </div>
           ) : (
@@ -170,7 +172,7 @@ export default function LabOrdenesPage() {
             style={{ animation: 'modal-in 0.2s ease-out' }}>
             <div className="flex items-start justify-between">
               <div>
-                <h2 className="text-lg font-bold text-slate-900">Agendar cita</h2>
+                <h2 className="text-lg font-bold text-slate-900">{t('lab.orders.scheduleTitle')}</h2>
                 <p className="text-sm text-slate-500 mt-0.5">{schedOrder.patient_name} · {schedOrder.exam_type}</p>
               </div>
               <button onClick={() => setSchedOrder(null)}

@@ -3,6 +3,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import NavBar from '../../components/NavBar'
 import { specialtyLabel } from '../../lib/types'
+import { useTranslation } from 'react-i18next'
 import type { Appointment } from '../../lib/types'
 import FeedbackModal from '../../components/FeedbackModal'
 
@@ -31,6 +32,7 @@ const TODAY = new Date().toISOString().slice(0, 10)
 
 export default function PatientPerfilPage() {
   const { profile, refreshProfile } = useAuth()
+  const { t } = useTranslation()
 
   const [editing, setEditing]     = useState(false)
   const [fullName, setFullName]   = useState(profile?.full_name ?? '')
@@ -143,11 +145,11 @@ export default function PatientPerfilPage() {
       })
       .eq('id', profile.id)
     if (error) {
-      setSaveMsg({ ok: false, text: 'No se pudo guardar. Intenta de nuevo.' })
+      setSaveMsg({ ok: false, text: t('common.couldNotSave') })
     } else {
       await refreshProfile()
       setEditing(false)
-      setSaveMsg({ ok: true, text: 'Perfil actualizado.' })
+      setSaveMsg({ ok: true, text: t('common.profileUpdated') })
     }
     setSaving(false)
   }
@@ -178,8 +180,8 @@ export default function PatientPerfilPage() {
 
       <main className="max-w-3xl mx-auto px-4 py-8 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Mi Perfil</h1>
-          <p className="text-slate-500 text-sm mt-1">Gestiona tu información personal.</p>
+          <h1 className="text-2xl font-bold text-slate-900">{t('patient.perfil.title')}</h1>
+          <p className="text-slate-500 text-sm mt-1">{t('patient.perfil.subtitle')}</p>
         </div>
 
         {/* Profile card */}
@@ -209,7 +211,7 @@ export default function PatientPerfilPage() {
                 disabled={uploading}
                 className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50 font-medium"
               >
-                Cambiar foto
+                {t('common.changePhoto')}
               </button>
               <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
             </div>
@@ -228,12 +230,12 @@ export default function PatientPerfilPage() {
                 <dl className="space-y-4">
                   {(
                     [
-                      { label: 'Nombre completo',      value: profile?.full_name },
-                      { label: 'Correo electrónico',   value: profile?.email },
-                      { label: 'Teléfono',              value: profile?.phone },
-                      { label: 'Ciudad',                value: profile?.city },
+                      { label: t('patient.perfil.nameLabel'),      value: profile?.full_name },
+                      { label: t('patient.perfil.emailLabel'),     value: profile?.email },
+                      { label: t('patient.perfil.phoneLabel'),     value: profile?.phone },
+                      { label: t('patient.perfil.cityLabel'),      value: profile?.city },
                       {
-                        label: 'Fecha de nacimiento',
+                        label: t('patient.perfil.birthDateLabel'),
                         value: profile?.birth_date
                           ? `${formatBirthDate(profile.birth_date)}${age !== null ? ` · ${age} años` : ''}`
                           : undefined,
@@ -243,7 +245,7 @@ export default function PatientPerfilPage() {
                     <div key={label} className="py-2 border-b border-slate-100 last:border-0">
                       <dt className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-0.5">{label}</dt>
                       <dd className="text-[15px] text-slate-900">
-                        {value ?? <span className="text-slate-400 italic text-sm">No registrado</span>}
+                        {value ?? <span className="text-slate-400 italic text-sm">{t('common.notRegistered')}</span>}
                       </dd>
                     </div>
                   ))}
@@ -254,7 +256,7 @@ export default function PatientPerfilPage() {
                     onClick={enterEdit}
                     className="flex items-center gap-2 px-4 py-2 rounded-xl border border-blue-300 text-sm font-semibold text-blue-600 hover:bg-blue-50 transition-colors"
                   >
-                    ✏️ Editar perfil
+                    {t('patient.perfil.editProfile')}
                   </button>
                 </div>
               </>
@@ -266,32 +268,32 @@ export default function PatientPerfilPage() {
             {editing && (
               <form onSubmit={handleSave} className="grid sm:grid-cols-2 gap-4">
                 <div className="sm:col-span-2">
-                  <label htmlFor="fullName" className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Nombre completo</label>
+                  <label htmlFor="fullName" className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{t('patient.perfil.nameLabel')}</label>
                   <input id="fullName" type="text" value={fullName} onChange={(e) => setFullName(e.target.value)}
                     className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors" />
                 </div>
 
                 <div className="sm:col-span-2">
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Correo electrónico</p>
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{t('patient.perfil.emailLabel')}</p>
                   <p className="text-sm text-slate-600 bg-slate-50 border border-slate-100 rounded-xl px-3.5 py-2.5">{profile?.email}</p>
-                  <p className="text-xs text-slate-400 mt-1">El correo no puede modificarse</p>
+                  <p className="text-xs text-slate-400 mt-1">{t('common.emailCannotChange')}</p>
                 </div>
 
                 <div>
-                  <label htmlFor="phone" className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Teléfono</label>
+                  <label htmlFor="phone" className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{t('patient.perfil.phoneLabel')}</label>
                   <input id="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
                     className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors" />
                 </div>
 
                 <div>
-                  <label htmlFor="city" className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Ciudad</label>
+                  <label htmlFor="city" className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{t('patient.perfil.cityLabel')}</label>
                   <input id="city" type="text" value={city} onChange={(e) => setCity(e.target.value)}
-                    placeholder="Bogotá, Medellín..."
+                    placeholder={t('patient.perfil.cityPlaceholder')}
                     className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors" />
                 </div>
 
                 <div>
-                  <label htmlFor="birthDate" className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Fecha de nacimiento</label>
+                  <label htmlFor="birthDate" className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{t('patient.perfil.birthDateLabel')}</label>
                   <input id="birthDate" type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)}
                     className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors" />
                 </div>
@@ -299,11 +301,11 @@ export default function PatientPerfilPage() {
                 <div className="sm:col-span-2 flex gap-3">
                   <button type="submit" disabled={saving}
                     className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-50 shadow-sm shadow-blue-100">
-                    {saving ? 'Guardando...' : 'Guardar cambios'}
+                    {saving ? t('common.saving') : t('common.saveChanges')}
                   </button>
                   <button type="button" onClick={cancelEdit} disabled={saving}
                     className="px-6 py-2.5 border border-slate-200 text-slate-700 text-sm font-semibold rounded-xl hover:bg-slate-50 transition-colors disabled:opacity-50">
-                    Cancelar
+                    {t('common.cancel')}
                   </button>
                 </div>
               </form>
@@ -313,8 +315,8 @@ export default function PatientPerfilPage() {
 
         {/* Appointment history */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-          <h2 className="text-base font-bold text-slate-900 mb-5">Historia Médica</h2>
-          <p className="text-xs text-slate-400 mb-4">Solo citas completadas por el médico.</p>
+          <h2 className="text-base font-bold text-slate-900 mb-5">{t('patient.perfil.historyTitle')}</h2>
+          <p className="text-xs text-slate-400 mb-4">{t('patient.perfil.historySubtitle')}</p>
 
           {loadingH ? (
             <div className="flex justify-center py-8">
@@ -326,8 +328,8 @@ export default function PatientPerfilPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
                   d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
-              <p className="text-slate-500 text-sm font-medium">Aún no tienes consultas en tu historia médica</p>
-              <p className="text-xs text-slate-400">Aquí aparecerán tus consultas completadas.</p>
+              <p className="text-slate-500 text-sm font-medium">{t('patient.perfil.noHistory')}</p>
+              <p className="text-xs text-slate-400">{t('patient.perfil.noHistoryDesc')}</p>
             </div>
           ) : (
             <>
@@ -406,7 +408,7 @@ export default function PatientPerfilPage() {
           onClose={() => setFeedbackAppt(null)}
           onSubmitted={() => {
             setFeedbackAppt(null)
-            setFeedbackToast('¡Gracias por tu calificación! 🌟')
+            setFeedbackToast(t('patient.miSalud.feedback.thankYou'))
             setTimeout(() => setFeedbackToast(null), 4000)
             fetchHistory()
           }}
@@ -435,7 +437,7 @@ export default function PatientPerfilPage() {
                 <div className="flex items-center gap-3">
                   <span className="text-2xl" aria-hidden="true">📋</span>
                   <div>
-                    <h2 className="text-lg font-bold text-slate-900">Consulta Médica</h2>
+                    <h2 className="text-lg font-bold text-slate-900">{t('patient.perfil.consultationModal')}</h2>
                     <p className="text-sm text-slate-500 mt-0.5">
                       {selected.slot
                         ? `${formatDate(selected.slot.date)} · ${formatTime(selected.slot.start_time)} – ${formatTime(selected.slot.end_time)}`
@@ -476,10 +478,10 @@ export default function PatientPerfilPage() {
                 <div>
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-base" aria-hidden="true">📝</span>
-                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Motivo de la consulta</p>
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">{t('patient.miSalud.consultationReason')}</p>
                   </div>
                   <p className="text-sm text-slate-700 leading-relaxed pl-1">
-                    {selected.reason ?? <span className="text-slate-400 italic">No especificado</span>}
+                    {selected.reason ?? <span className="text-slate-400 italic">{t('patient.miSalud.notSpecified')}</span>}
                   </p>
                 </div>
 
@@ -489,7 +491,7 @@ export default function PatientPerfilPage() {
                 <div>
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-base" aria-hidden="true">🩺</span>
-                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Resumen médico</p>
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">{t('patient.miSalud.medicalSummary')}</p>
                   </div>
                   {noAtendida ? (
                     <div className="flex items-start gap-3 p-3.5 bg-orange-50 border border-orange-200 rounded-xl">
@@ -497,13 +499,13 @@ export default function PatientPerfilPage() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
                       </svg>
                       <div>
-                        <p className="text-sm font-semibold text-orange-800">Esta cita no fue atendida</p>
-                        <p className="text-xs text-orange-600 mt-0.5">La consulta fue cerrada automáticamente.</p>
+                        <p className="text-sm font-semibold text-orange-800">{t('patient.miSalud.notAttendedText')}</p>
+                        <p className="text-xs text-orange-600 mt-0.5">{t('patient.miSalud.notAttendedText')}</p>
                       </div>
                     </div>
                   ) : (
                     <p className="text-sm text-slate-700 bg-slate-50 border border-slate-100 rounded-xl px-3.5 py-3 leading-relaxed">
-                      {selected.summary ?? <span className="text-slate-400 italic">El médico no escribió una conclusión.</span>}
+                      {selected.summary ?? <span className="text-slate-400 italic">{t('patient.miSalud.noSummary')}</span>}
                     </p>
                   )}
                 </div>
@@ -515,7 +517,7 @@ export default function PatientPerfilPage() {
                     <div>
                       <div className="flex items-center gap-2 mb-3">
                         <span className="text-base" aria-hidden="true">💊</span>
-                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Medicamentos recetados</p>
+                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">{t('patient.miSalud.prescribedMeds')}</p>
                       </div>
                       <ul className="space-y-2.5">
                         {medItems.map((item, i) => (
@@ -540,7 +542,7 @@ export default function PatientPerfilPage() {
                     <div>
                       <div className="flex items-center gap-2 mb-3">
                         <span className="text-base" aria-hidden="true">🔬</span>
-                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Exámenes ordenados</p>
+                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">{t('patient.miSalud.orderedExams')}</p>
                       </div>
                       <ul className="space-y-2">
                         {selectedDiagOrders.map((order: any) => (
@@ -553,7 +555,7 @@ export default function PatientPerfilPage() {
                                 ? 'bg-blue-100 text-blue-700'
                                 : 'bg-orange-100 text-orange-700'
                             }`}>
-                              {order.status === 'completed' ? 'Completado ✓' : order.status === 'scheduled' ? 'Agendado' : 'Pendiente'}
+                              {order.status === 'completed' ? t('patient.examenes.statusCompleted') : order.status === 'scheduled' ? t('patient.examenes.statusScheduled') : t('patient.examenes.statusPending')}
                             </span>
                           </li>
                         ))}
@@ -569,7 +571,7 @@ export default function PatientPerfilPage() {
                     <div>
                       <div className="flex items-center gap-2 mb-3">
                         <span className="text-base" aria-hidden="true">📎</span>
-                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Archivos compartidos</p>
+                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">{t('patient.perfil.sharedFiles')}</p>
                       </div>
                       <ul className="space-y-2">
                         {selectedDiagFiles.map((file: any) => (
@@ -577,7 +579,7 @@ export default function PatientPerfilPage() {
                             <div className="flex-1 min-w-0">
                               <p className="text-slate-800 truncate">{file.file_name}</p>
                               <p className="text-xs text-slate-400">
-                                {file.stage === 'pre_appointment' ? 'Previo a la cita' : 'Durante la consulta'}
+                                {file.stage === 'pre_appointment' ? t('patient.perfil.beforeAppointment') : t('patient.perfil.duringCall')}
                               </p>
                             </div>
                             <a
@@ -602,7 +604,7 @@ export default function PatientPerfilPage() {
                     <div>
                       <div className="flex items-center gap-2 mb-2">
                         <span className="text-base" aria-hidden="true">⭐</span>
-                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Tu calificación</p>
+                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">{t('patient.miSalud.yourRating')}</p>
                       </div>
                       {fb ? (
                         <div className="space-y-1.5">
@@ -610,14 +612,14 @@ export default function PatientPerfilPage() {
                           {fb.comment && (
                             <p className="text-xs text-slate-500 italic">"{fb.comment}"</p>
                           )}
-                          <p className="text-xs text-slate-400">Calificación enviada ✓</p>
+                          <p className="text-xs text-slate-400">{t('patient.miSalud.ratedSent')}</p>
                         </div>
                       ) : (
                         <button
                           onClick={() => { setSelected(null); setFeedbackAppt(selected) }}
                           className="text-sm text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1.5 transition-colors"
                         >
-                          ⭐ Calificar esta consulta
+                          {t('patient.perfil.rateThisConsultation')}
                         </button>
                       )}
                     </div>
@@ -626,7 +628,7 @@ export default function PatientPerfilPage() {
 
                 <button onClick={() => setSelected(null)}
                   className="w-full py-3 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
-                  Cerrar
+                  {t('common.close')}
                 </button>
               </div>
             </div>

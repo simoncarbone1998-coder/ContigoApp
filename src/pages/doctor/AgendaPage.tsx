@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase'
 import NavBar from '../../components/NavBar'
 import DoctorVideoCall from '../../components/DoctorVideoCall'
 import { specialtyLabel } from '../../lib/types'
+import { useTranslation } from 'react-i18next'
 import type { AvailabilitySlot, Appointment } from '../../lib/types'
 import { generateSlots, roundUpToSlot } from '../../lib/slots'
 import { createDailyRoom, createDailyToken } from '../../services/dailyService'
@@ -24,12 +25,14 @@ function formatDate(d: string) {
 function formatTime(t: string) { return t.slice(0, 5) }
 type AgendaTab = 'agenda' | 'historial'
 
-const MONTH_NAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
-const DAY_HEADERS = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom']
+// Month names and day headers will come from i18n
 
 export default function DoctorAgendaPage() {
   const { profile } = useAuth()
   const navigate = useNavigate()
+  const { t } = useTranslation()
+  const MONTH_NAMES = t('months.capitalized', { returnObjects: true }) as string[]
+  const DAY_HEADERS = t('days.short', { returnObjects: true }) as string[]
 
   const [tab, setTab] = useState<AgendaTab>('agenda')
 
@@ -372,7 +375,7 @@ export default function DoctorAgendaPage() {
 
     if (!noMeds) {
       if (meds.length === 0) {
-        setCompleteError('Agrega al menos un medicamento o marca "No recetar medicamentos".')
+        setCompleteError(t('doctor.agenda.noMeds'))
         return
       }
       if (meds.some((m) => !m.medicine_name.trim() || !m.dose.trim() || !m.instructions.trim())) {
@@ -506,8 +509,8 @@ export default function DoctorAgendaPage() {
         {/* Page header */}
         <div className="flex items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Mi Agenda</h1>
-            <p className="text-slate-500 text-sm mt-0.5">Gestiona tus horarios y consultas.</p>
+            <h1 className="text-2xl font-bold text-slate-900">{t('doctor.agenda.title')}</h1>
+            <p className="text-slate-500 text-sm mt-0.5">{t('doctor.agenda.subtitle')}</p>
           </div>
           <button
             onClick={handleExportCalendar}
@@ -532,16 +535,16 @@ export default function DoctorAgendaPage() {
         {/* Tabs */}
         <div className="flex border-b border-slate-200 bg-white rounded-t-2xl overflow-hidden">
           {([
-            { key: 'agenda',    label: 'Agenda' },
-            { key: 'historial', label: `Historial (${history.length})` },
-          ] as { key: AgendaTab; label: string }[]).map((t) => (
-            <button key={t.key} onClick={() => setTab(t.key)}
+            { key: 'agenda',    label: t('doctor.agenda.tab_agenda') },
+            { key: 'historial', label: `${t('doctor.agenda.tab_history')} (${history.length})` },
+          ] as { key: AgendaTab; label: string }[]).map((tab_item) => (
+            <button key={tab_item.key} onClick={() => setTab(tab_item.key)}
               className={`px-6 py-3.5 text-sm font-semibold transition-colors border-b-2 -mb-px ${
-                tab === t.key
+                tab === tab_item.key
                   ? 'text-blue-700 border-blue-600 bg-blue-50/50'
                   : 'text-slate-500 border-transparent hover:text-slate-800 hover:bg-slate-50'
               }`}>
-              {t.label}
+              {tab_item.label}
             </button>
           ))}
         </div>
@@ -554,14 +557,14 @@ export default function DoctorAgendaPage() {
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
               {/* Month navigation */}
               <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-                <button onClick={prevMonth}
+                <button onClick={prevMonth} aria-label={t('doctor.agenda.prevMonth')}
                   className="w-9 h-9 rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-800 transition-colors flex items-center justify-center">
                   ‹
                 </button>
                 <h2 className="text-base font-bold text-slate-900">
                   {MONTH_NAMES[month]} {year}
                 </h2>
-                <button onClick={nextMonth}
+                <button onClick={nextMonth} aria-label={t('doctor.agenda.nextMonth')}
                   className="w-9 h-9 rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-800 transition-colors flex items-center justify-center">
                   ›
                 </button>
@@ -657,7 +660,7 @@ export default function DoctorAgendaPage() {
                 >
                   <span className="flex items-center gap-2">
                     <span className="w-6 h-6 rounded-lg bg-blue-600 text-white text-xs flex items-center justify-center font-bold">+</span>
-                    Agregar disponibilidad
+                    {t('doctor.agenda.addAvailability')}
                   </span>
                   <svg className={`w-4 h-4 text-slate-400 transition-transform ${formOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -834,7 +837,7 @@ export default function DoctorAgendaPage() {
                     </div>
                   ) : daySlots.length === 0 ? (
                     <div className="text-center py-6">
-                      <p className="text-sm text-slate-500">Sin horarios este día.</p>
+                      <p className="text-sm text-slate-500">{t('doctor.agenda.noSlotsDay')}</p>
                       <p className="text-xs text-slate-400 mt-1">Usa el formulario para agregar disponibilidad.</p>
                     </div>
                   ) : (
@@ -861,7 +864,7 @@ export default function DoctorAgendaPage() {
                                   {appt.patient?.full_name ?? '—'}
                                 </p>
                               ) : (
-                                <p className="text-xs text-emerald-600 mt-0.5">Disponible</p>
+                                <p className="text-xs text-emerald-600 mt-0.5">{t('doctor.agenda.availableSlot')}</p>
                               )}
                             </div>
                             <svg className="w-4 h-4 text-slate-300 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -888,7 +891,7 @@ export default function DoctorAgendaPage() {
                 </div>
               ) : history.length === 0 ? (
                 <div className="text-center py-12">
-                  <p className="text-slate-600 font-medium text-sm">Sin citas en el historial</p>
+                  <p className="text-slate-600 font-medium text-sm">{t('doctor.agenda.noHistoryTitle')}</p>
                   <p className="text-slate-400 text-sm mt-1">Las citas completadas aparecerán aquí.</p>
                 </div>
               ) : (
@@ -1058,14 +1061,14 @@ export default function DoctorAgendaPage() {
                       Conclusión / Diagnóstico
                     </label>
                     <textarea id="summary" value={summary} onChange={(e) => setSummary(e.target.value)} rows={3}
-                      placeholder="Notas de la consulta para el paciente..."
+                      placeholder={t('doctor.agenda.summaryPlaceholder')}
                       className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors resize-none" />
                   </div>
 
                   {/* Medications section */}
                   <div className="pt-4 border-t border-slate-100">
                     <div className="flex items-center justify-between mb-3">
-                      <p className="text-xs font-bold text-slate-700 uppercase tracking-wide">Recetar medicamentos</p>
+                      <p className="text-xs font-bold text-slate-700 uppercase tracking-wide">{t('doctor.agenda.prescribeMeds')}</p>
                     </div>
 
                     {!noMeds && (
@@ -1113,7 +1116,7 @@ export default function DoctorAgendaPage() {
                           onClick={() => setMeds((m) => [...m, emptyMed()])}
                           className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 font-semibold transition-colors"
                         >
-                          <span className="text-lg leading-none">+</span> Agregar medicamento
+                          <span className="text-lg leading-none">+</span> {t('doctor.agenda.addMed')}
                         </button>
                       </div>
                     )}
@@ -1125,7 +1128,7 @@ export default function DoctorAgendaPage() {
                         onChange={(e) => setNoMeds(e.target.checked)}
                         className="w-4 h-4 rounded border-slate-300 accent-blue-600"
                       />
-                      <span className="text-sm text-slate-600">No recetar medicamentos en esta cita</span>
+                      <span className="text-sm text-slate-600">{t('doctor.agenda.noMeds')}</span>
                     </label>
                   </div>
 

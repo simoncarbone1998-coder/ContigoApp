@@ -1,10 +1,12 @@
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useLabContext } from '../../contexts/LabContext'
+import { useTranslation } from 'react-i18next'
 
 export default function LabPendingPage() {
   const navigate  = useNavigate()
   const { lab }   = useLabContext()
+  const { t } = useTranslation()
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -18,7 +20,7 @@ export default function LabPendingPage() {
       <div className="w-full max-w-md space-y-4">
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 text-center space-y-4">
           <div className="text-5xl">⏳</div>
-          <h1 className="text-xl font-bold text-slate-900">Tu solicitud está siendo revisada</h1>
+          <h1 className="text-xl font-bold text-slate-900">{t('lab.pending.title')}</h1>
           <p className="text-slate-500 text-sm leading-relaxed">
             Nuestro equipo verificará tus documentos y credenciales.
             Este proceso puede tomar <strong>1–3 días hábiles</strong>.
@@ -28,13 +30,13 @@ export default function LabPendingPage() {
 
         {lab && (
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-4">Información enviada</p>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-4">{t('lab.pending.submittedInfo')}</p>
             <div className="space-y-3 text-sm">
               {[
-                { label: 'Centro',  value: lab.name },
-                { label: 'Tipo',    value: lab.type === 'laboratorio' ? 'Laboratorio clínico' : lab.type === 'imagenes' ? 'Imágenes diagnósticas' : 'Centro de diagnóstico e imágenes' },
-                { label: 'Ciudad',  value: lab.city },
-                { label: 'Correo',  value: lab.email },
+                { label: t('common.name'),  value: lab.name },
+                { label: t('common.type'),  value: lab.type === 'laboratorio' ? t('lab.registro.typeLab') : lab.type === 'imagenes' ? t('lab.registro.typeImages') : t('lab.registro.typeBoth') },
+                { label: t('common.city'),  value: lab.city },
+                { label: t('common.email'), value: lab.email },
               ].map(({ label, value }) => value && (
                 <div key={label} className="flex justify-between gap-4">
                   <span className="text-slate-500">{label}</span>
@@ -47,14 +49,14 @@ export default function LabPendingPage() {
 
         <div className="mt-6 text-center space-y-4">
           <p className="text-sm text-slate-400">
-            ¿Tienes preguntas?{' '}
+            {t('common.questions')}{' '}
             <a href="mailto:hola@contigomedicina.com" className="text-blue-600 hover:underline font-medium">
-              hola@contigomedicina.com
+              {t('common.contactEmail')}
             </a>
           </p>
           <button onClick={handleLogout}
             className="w-full py-3 border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
-            Cerrar sesión
+            {t('lab.pending.signOut')}
           </button>
         </div>
       </div>

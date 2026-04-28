@@ -5,6 +5,7 @@ import NavBar from '../../components/NavBar'
 import PatientVideoCall from '../../components/PatientVideoCall'
 import FeedbackModal from '../../components/FeedbackModal'
 import { specialtyLabel } from '../../lib/types'
+import { useTranslation } from 'react-i18next'
 import type { Appointment, AvailabilitySlot, Specialty } from '../../lib/types'
 import { createDailyRoom, createDailyToken } from '../../services/dailyService'
 
@@ -20,10 +21,6 @@ const SPECIALTY_ICONS: Record<string, string> = {
   psicologia:       '🧠',
 }
 
-const DIAS_ES  = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado']
-const MESES_ES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
-const MESES_SH = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function minutesUntil(slotDate: string, slotStartTime: string): number {
@@ -31,16 +28,6 @@ function minutesUntil(slotDate: string, slotStartTime: string): number {
 }
 function formatDate(d: string) { const [y,m,day]=d.split('-'); return `${day}/${m}/${y}` }
 function formatTime(t: string) { return t.slice(0, 5) }
-function formatDateLong(d: string): string {
-  const [y, m, day] = d.split('-').map(Number)
-  const date = new Date(y, m - 1, day)
-  return `${DIAS_ES[date.getDay()]} ${day} de ${MESES_ES[m - 1]}`
-}
-function formatDateMedium(d: string): string {
-  const [y, m, day] = d.split('-').map(Number)
-  const date = new Date(y, m - 1, day)
-  return `${DIAS_ES[date.getDay()]} ${day} ${MESES_SH[m - 1]}`
-}
 function formatTimeAMPM(t: string): string {
   const [h, min] = t.split(':').map(Number)
   const ampm = h >= 12 ? 'PM' : 'AM'
@@ -49,6 +36,25 @@ function formatTimeAMPM(t: string): string {
 }
 function docInitials(name: string | null | undefined): string {
   return (name ?? 'D').trim().split(' ').filter(Boolean).map(p => p[0]).slice(0, 2).join('').toUpperCase() || 'D'
+}
+
+function useDateFormatters() {
+  const { t } = useTranslation()
+  const daysLong  = t('days.long',   { returnObjects: true }) as string[]
+  const monthsLong = t('months.long', { returnObjects: true }) as string[]
+  const monthsShort = t('months.short', { returnObjects: true }) as string[]
+
+  function formatDateLong(d: string): string {
+    const [y, m, day] = d.split('-').map(Number)
+    const date = new Date(y, m - 1, day)
+    return `${daysLong[date.getDay()]} ${day} de ${monthsLong[m - 1]}`
+  }
+  function formatDateMedium(d: string): string {
+    const [y, m, day] = d.split('-').map(Number)
+    const date = new Date(y, m - 1, day)
+    return `${daysLong[date.getDay()]} ${day} ${monthsShort[m - 1]}`
+  }
+  return { formatDateLong, formatDateMedium }
 }
 
 // ── Email helpers (fire-and-forget) ─────────────────────────────────────────
@@ -120,6 +126,8 @@ type FbRecord = { rating: number; comment: string | null }
 
 export default function MiSaludPage() {
   const { profile } = useAuth()
+  const { t } = useTranslation()
+  const { formatDateLong, formatDateMedium } = useDateFormatters()
 
   // ── Data ──────────────────────────────────────────────────────────────────
   const [upcomingAppts,     setUpcomingAppts]     = useState<Appointment[]>([])
@@ -283,7 +291,7 @@ export default function MiSaludPage() {
       setVideoAppt({ ...appt, daily_room_url: roomUrl, daily_room_name: roomName })
       setVideoToken(token)
     } catch (err) {
-      setVideoError(err instanceof Error ? err.message : 'No se pudo crear la sala. Intenta de nuevo.')
+      setVideoError(err instanceof Error ? err.message : t('patient.miSalud.video.cannotCreate'))
     }
     setJoiningVideo(false)
   }
@@ -301,7 +309,7 @@ export default function MiSaludPage() {
     setCancelling(true)
     setCancelError(null)
     const { error: err } = await supabase.from('appointments').update({ status: 'cancelled' }).eq('id', cancelAppt.id)
-    if (err) { setCancelError('No se pudo cancelar. Intenta de nuevo.'); setCancelling(false); return }
+    if (err) { setCancelError(t('patient.miSalud.cancel.cannotCancel')); setCancelling(false); return }
     setCancelAppt(null)
     setConfirmCancel(false)
     await fetchData()
@@ -341,7 +349,7 @@ export default function MiSaludPage() {
       slot_id: rscSlot.id, status: 'confirmed', reason: reschedulingAppt.reason,
     })
     if (insertErr) {
-      setRscError('No se pudo cambiar la cita. Intenta de nuevo.')
+      setRscError(t('patient.miSalud.reschedule.cannotChange'))
       setRscSaving(false); return
     }
     await supabase.from('appointments').update({ status: 'cancelled' }).eq('id', reschedulingAppt.id)
@@ -358,7 +366,7 @@ export default function MiSaludPage() {
     }
     setReschedulingAppt(null)
     setRscSaving(false)
-    setSuccessToast('✅ Tu cita ha sido reagendada exitosamente')
+    setSuccessToast(t('patient.miSalud.reschedule.successToast'))
     setTimeout(() => setSuccessToast(null), 5000)
     await fetchData()
   }
@@ -412,7 +420,7 @@ export default function MiSaludPage() {
       reason:     bookingReason.trim() || null,
     }).select('id').single()
     if (err) {
-      setBookingError('No se pudo reservar la cita. Intenta con otro horario.')
+      setBookingError(t('patient.miSalud.booking.cannotBook'))
       setBookingSubmitting(false); return
     }
     // Upload pre-appointment files (fire-and-forget)
@@ -450,7 +458,7 @@ export default function MiSaludPage() {
       await supabase.from('specialist_referrals').update({ status: 'used' }).eq('id', bookingFromReferral.id)
     }
     setBookingOpen(false)
-    setSuccessToast('¡Cita confirmada! Te enviamos un email con los detalles.')
+    setSuccessToast(t('patient.miSalud.booking.successToast'))
     setTimeout(() => setSuccessToast(null), 5000)
     await fetchData()
     setBookingSubmitting(false)
@@ -527,8 +535,8 @@ export default function MiSaludPage() {
 
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Mi Salud</h1>
-          <p className="text-slate-500 text-sm mt-0.5">Tu historial médico y consultas.</p>
+          <h1 className="text-2xl font-bold text-slate-900">{t('patient.miSalud.title')}</h1>
+          <p className="text-slate-500 text-sm mt-0.5">{t('patient.miSalud.subtitle')}</p>
         </div>
 
         {/* Success toast */}
@@ -565,14 +573,14 @@ export default function MiSaludPage() {
                   <span className="text-3xl" aria-hidden="true">🏥</span>
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold text-slate-900">Bienvenido/a a Contigo</h2>
+                  <h2 className="text-xl font-bold text-slate-900">{t('patient.miSalud.welcomeTitle')}</h2>
                   <p className="text-slate-500 text-sm mt-2 max-w-sm mx-auto leading-relaxed">
-                    Agenda tu primera consulta con un médico general para comenzar tu atención médica.
+                    {t('patient.miSalud.welcomeText')}
                   </p>
                 </div>
                 <button onClick={() => openBooking()}
                   className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-colors shadow-sm shadow-blue-100">
-                  Agendar consulta →
+                  {t('patient.miSalud.bookAppointment')}
                 </button>
               </div>
             )}
@@ -580,7 +588,7 @@ export default function MiSaludPage() {
             {/* ── STATE 2: Upcoming appointments ── */}
             {hasUpcoming && (
               <section className="space-y-3">
-                <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wide">Próxima cita</h2>
+                <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wide">{t('patient.miSalud.upcomingTitle')}</h2>
 
                 {/* Featured card */}
                 {(() => {
@@ -589,12 +597,12 @@ export default function MiSaludPage() {
                   const mins = slot ? minutesUntil(slot.date, slot.start_time) : Infinity
                   const canJoin = mins <= 5 && mins > -60
                   const joinLabel = joiningVideo
-                    ? 'Conectando...'
+                    ? t('patient.miSalud.connecting')
                     : canJoin
-                    ? 'Unirse a la consulta'
+                    ? t('patient.miSalud.joinConsultation')
                     : mins > 60
-                    ? `Disponible en ${Math.ceil(mins / 60)}h`
-                    : `Disponible en ${Math.ceil(Math.max(mins, 1))} min`
+                    ? t('patient.miSalud.availableIn', { time: `${Math.ceil(mins / 60)}h` })
+                    : t('patient.miSalud.availableIn', { time: `${Math.ceil(Math.max(mins, 1))} min` })
 
                   return (
                     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden"
@@ -618,7 +626,7 @@ export default function MiSaludPage() {
                             </p>
                             <div className="flex items-center gap-1.5 mt-2">
                               <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
-                              <span className="text-xs font-semibold text-emerald-700">Confirmada</span>
+                              <span className="text-xs font-semibold text-emerald-700">{t('patient.miSalud.confirmed')}</span>
                             </div>
                           </div>
                         </div>
@@ -637,11 +645,11 @@ export default function MiSaludPage() {
                           </button>
                           <button onClick={() => openRescheduleModal(appt)}
                             className="sm:flex-none px-4 py-2.5 rounded-xl border-2 border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
-                            Reagendar
+                            {t('patient.miSalud.reschedule')}
                           </button>
                           <button onClick={() => openCancelModal(appt)}
                             className="sm:flex-none px-4 py-2.5 rounded-xl border border-red-200 text-sm font-semibold text-red-600 hover:bg-red-50 transition-colors">
-                            Cancelar
+                            {t('patient.miSalud.cancel')}
                           </button>
                         </div>
                         {videoError && (
@@ -671,7 +679,7 @@ export default function MiSaludPage() {
                     </div>
                     <button onClick={() => openCancelModal(appt)}
                       className="shrink-0 text-xs font-semibold text-red-500 hover:text-red-700 transition-colors">
-                      Cancelar
+                      {t('patient.miSalud.cancel')}
                     </button>
                   </div>
                 ))}
@@ -681,11 +689,11 @@ export default function MiSaludPage() {
                   <button onClick={() => openBooking()}
                     className="flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-800 transition-colors">
                     <span className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center text-xs font-bold">+</span>
-                    Agendar otra consulta
+                    {t('patient.miSalud.bookAnother')}
                   </button>
                   {hasHadGeneral && (
                     <p className="text-xs text-slate-400 mt-1.5 ml-7">
-                      Para especialistas necesitas referencia de tu médico general.
+                      {t('patient.miSalud.specialistNote')}
                     </p>
                   )}
                 </div>
@@ -697,7 +705,7 @@ export default function MiSaludPage() {
               <div>
                 <button onClick={() => openBooking()}
                   className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-colors shadow-sm shadow-blue-100">
-                  + Agendar consulta
+                  {t('patient.miSalud.bookBtn')}
                 </button>
               </div>
             )}
@@ -706,8 +714,8 @@ export default function MiSaludPage() {
             {hasReferrals && (
               <section className="space-y-3">
                 <div>
-                  <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wide">Referencias activas</h2>
-                  <p className="text-xs text-slate-400 mt-1">Tu médico te ha referido a estos especialistas.</p>
+                  <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wide">{t('patient.miSalud.activeReferrals')}</h2>
+                  <p className="text-xs text-slate-400 mt-1">{t('patient.miSalud.referralsNote')}</p>
                 </div>
                 <div className="grid sm:grid-cols-2 gap-4">
                   {activeReferrals.map(ref => (
@@ -725,12 +733,12 @@ export default function MiSaludPage() {
                             ? 'bg-orange-50 text-orange-700 border-orange-200'
                             : 'bg-blue-50 text-blue-700 border-blue-200'
                         }`}>
-                          {ref.urgency === 'prioritaria' ? 'Prioritaria' : 'Rutinaria'}
+                          {ref.urgency === 'prioritaria' ? t('patient.miSalud.priority') : t('patient.miSalud.routine')}
                         </span>
                       </div>
                       <button onClick={() => openBooking({ specialty: ref.specialty, fromReferral: ref })}
                         className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors">
-                        Agendar →
+                        {t('patient.miSalud.bookReferral')}
                       </button>
                     </div>
                   ))}
@@ -750,7 +758,7 @@ export default function MiSaludPage() {
                       </div>
                       <button onClick={() => openBooking({ specialty: rem.specialty })}
                         className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors">
-                        Agendar control →
+                        {t('patient.miSalud.bookControl')}
                       </button>
                     </div>
                   ))}
@@ -761,7 +769,7 @@ export default function MiSaludPage() {
             {/* ── STATE 4: Past appointments ── */}
             {hasPast && (
               <section className="space-y-3">
-                <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wide">Historial de consultas</h2>
+                <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wide">{t('patient.miSalud.historyTitle')}</h2>
                 <ul className="space-y-2">
                   {pastAppts.map(appt => {
                     const isExpanded  = expandedApptId === appt.id
@@ -785,7 +793,7 @@ export default function MiSaludPage() {
                               </p>
                               {noAtendida ? (
                                 <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 border border-orange-200">
-                                  No atendida
+                                  {t('patient.miSalud.notAttended')}
                                 </span>
                               ) : (
                                 <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
@@ -799,7 +807,7 @@ export default function MiSaludPage() {
                           </div>
                           {!noAtendida && (
                             <span className="shrink-0 text-xs font-semibold text-emerald-700 flex items-center gap-1">
-                              ✓ Completada
+                              {t('patient.miSalud.completed')}
                             </span>
                           )}
                           <svg className={`w-4 h-4 text-slate-300 shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
@@ -815,32 +823,32 @@ export default function MiSaludPage() {
 
                             {/* Motivo */}
                             <div>
-                              <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-1">📝 Motivo de la consulta</p>
+                              <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-1">{t('patient.miSalud.consultationReason')}</p>
                               <p className="text-sm text-slate-700">
-                                {appt.reason ?? <span className="text-slate-400 italic">No especificado</span>}
+                                {appt.reason ?? <span className="text-slate-400 italic">{t('patient.miSalud.notSpecified')}</span>}
                               </p>
                             </div>
 
                             {/* Resumen */}
                             <div>
-                              <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-1">🩺 Resumen médico</p>
+                              <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-1">{t('patient.miSalud.medicalSummary')}</p>
                               {noAtendida ? (
                                 <div className="flex items-start gap-2.5 p-3 bg-orange-50 border border-orange-200 rounded-xl">
                                   <svg className="w-4 h-4 text-orange-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
                                   </svg>
-                                  <p className="text-sm font-semibold text-orange-800">Esta cita no fue atendida</p>
+                                  <p className="text-sm font-semibold text-orange-800">{t('patient.miSalud.notAttendedText')}</p>
                                 </div>
                               ) : (
                                 <p className="text-sm text-slate-700 bg-slate-50 border border-slate-100 rounded-xl px-3.5 py-3 leading-relaxed">
-                                  {appt.summary ?? <span className="text-slate-400 italic">El médico no escribió una conclusión.</span>}
+                                  {appt.summary ?? <span className="text-slate-400 italic">{t('patient.miSalud.noSummary')}</span>}
                                 </p>
                               )}
                             </div>
 
                             {/* Medications */}
                             <div>
-                              <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-1">💊 Medicamentos recetados</p>
+                              <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-1">{t('patient.miSalud.prescribedMeds')}</p>
                               {medItems.length > 0 ? (
                                 <ul className="space-y-1.5">
                                   {medItems.map((item: { medicine_name: string; dose: string; instructions: string }, i: number) => (
@@ -855,14 +863,14 @@ export default function MiSaludPage() {
                                   ))}
                                 </ul>
                               ) : (
-                                <p className="text-sm text-slate-400 italic">No se recetaron medicamentos.</p>
+                                <p className="text-sm text-slate-400 italic">{t('patient.miSalud.noMeds')}</p>
                               )}
                             </div>
 
                             {/* Diagnostic orders */}
                             {diag?.orders.length > 0 && (
                               <div>
-                                <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-1">🔬 Exámenes ordenados</p>
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-1">{t('patient.miSalud.orderedExams')}</p>
                                 <ul className="space-y-1.5">
                                   {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                                   {diag.orders.map((order: any) => (
@@ -871,7 +879,7 @@ export default function MiSaludPage() {
                                       <span className={`shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full ${
                                         order.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-orange-100 text-orange-700'
                                       }`}>
-                                        {order.status === 'completed' ? 'Completado ✓' : 'Pendiente'}
+                                        {order.status === 'completed' ? t('patient.miSalud.examCompleted') : t('patient.miSalud.examPending')}
                                       </span>
                                     </li>
                                   ))}
@@ -882,19 +890,19 @@ export default function MiSaludPage() {
                             {/* Rating */}
                             {!noAtendida && (
                               <div>
-                                <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-1">⭐ Tu calificación</p>
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-1">{t('patient.miSalud.yourRating')}</p>
                                 {fb ? (
                                   <div className="space-y-1">
                                     <StarsDisplay rating={fb.rating} />
                                     {fb.comment && <p className="text-xs text-slate-500 italic">"{fb.comment}"</p>}
-                                    <p className="text-xs text-slate-400">Calificación enviada ✓</p>
+                                    <p className="text-xs text-slate-400">{t('patient.miSalud.ratedSent')}</p>
                                   </div>
                                 ) : (
                                   <button
                                     onClick={() => { setExpandedApptId(null); setFeedbackAppt(appt) }}
                                     className="text-sm text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1 transition-colors"
                                   >
-                                    ⭐ Calificar consulta →
+                                    {t('patient.miSalud.rateConsultation')}
                                   </button>
                                 )}
                               </div>
@@ -922,7 +930,7 @@ export default function MiSaludPage() {
             {/* Header */}
             <div className="flex items-start justify-between px-6 pt-6 pb-4 border-b border-slate-100 sticky top-0 bg-white rounded-t-3xl sm:rounded-t-2xl z-10">
               <div>
-                <h2 className="text-lg font-bold text-slate-900">Agendar consulta</h2>
+                <h2 className="text-lg font-bold text-slate-900">{t('patient.miSalud.booking.title')}</h2>
                 <p className="text-sm text-slate-500 mt-0.5">{specialtyLabel(bookingSpecialty as Specialty)}</p>
               </div>
               <button onClick={() => !bookingSubmitting && setBookingOpen(false)}
@@ -937,27 +945,27 @@ export default function MiSaludPage() {
             <div className="flex items-center gap-3 px-6 py-3">
               <div className="flex items-center gap-2">
                 <span className={`w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center ${bookingStep >= 1 ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-500'}`}>1</span>
-                <span className="text-xs text-slate-500 hidden sm:block">Fecha y hora</span>
+                <span className="text-xs text-slate-500 hidden sm:block">{t('patient.miSalud.booking.step1')}</span>
               </div>
               <div className="flex-1 h-px bg-slate-200" />
               <div className="flex items-center gap-2">
                 <span className={`w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center ${bookingStep >= 2 ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-500'}`}>2</span>
-                <span className="text-xs text-slate-500 hidden sm:block">Motivo</span>
+                <span className="text-xs text-slate-500 hidden sm:block">{t('patient.miSalud.booking.step2')}</span>
               </div>
             </div>
 
             {/* Step 1: Date & time */}
             {bookingStep === 1 && (
               <div className="px-6 pb-6">
-                <h3 className="text-sm font-bold text-slate-700 mb-4">Elige una fecha y hora disponible</h3>
+                <h3 className="text-sm font-bold text-slate-700 mb-4">{t('patient.miSalud.booking.chooseDateTitle')}</h3>
                 {bookingSlotsLoading ? (
                   <div className="flex justify-center py-10">
                     <div className="w-6 h-6 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin" />
                   </div>
                 ) : sortedBookingDates.length === 0 ? (
                   <div className="text-center py-8">
-                    <p className="text-slate-600 font-medium text-sm">No hay horarios disponibles en los próximos 14 días.</p>
-                    <p className="text-slate-400 text-sm mt-1">Intenta más adelante.</p>
+                    <p className="text-slate-600 font-medium text-sm">{t('patient.miSalud.booking.noSlots')}</p>
+                    <p className="text-slate-400 text-sm mt-1">{t('patient.miSalud.booking.tryLater')}</p>
                   </div>
                 ) : (
                   <div className="space-y-5">
@@ -996,31 +1004,31 @@ export default function MiSaludPage() {
                 {/* Reason */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
-                    ¿Cuál es el motivo de tu consulta?
+                    {t('patient.miSalud.booking.chooseReasonTitle')}
                   </label>
                   <textarea
                     value={bookingReason}
                     onChange={(e) => setBookingReason(e.target.value)}
                     rows={3}
-                    placeholder="Describe brevemente el motivo de tu consulta..."
+                    placeholder={t('patient.miSalud.booking.reasonPlaceholder')}
                     className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors resize-none"
                   />
                   <p className={`text-xs mt-1 text-right ${bookingReason.trim().length >= 10 ? 'text-emerald-600' : 'text-slate-400'}`}>
-                    {bookingReason.trim().length} / mín. 10 caracteres
+                    {t('patient.miSalud.booking.minChars', { count: bookingReason.trim().length })}
                   </p>
                 </div>
 
                 {/* File upload */}
                 <div>
                   <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
-                    Documentos previos <span className="normal-case font-normal text-slate-400">(opcional)</span>
+                    {t('patient.miSalud.booking.prevDocs')} <span className="normal-case font-normal text-slate-400">({t('common.optional')})</span>
                   </p>
                   <button type="button" onClick={() => preFileRef.current?.click()}
                     className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-dashed border-blue-200 text-xs font-semibold text-blue-600 hover:bg-blue-50 hover:border-blue-300 transition-colors">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
                     </svg>
-                    Subir archivo
+                    {t('patient.miSalud.booking.uploadFile')}
                   </button>
                   <input ref={preFileRef} type="file" multiple
                     accept="application/pdf,image/jpeg,image/jpg,image/png"
@@ -1050,14 +1058,14 @@ export default function MiSaludPage() {
                 <div className="flex gap-3 pt-1">
                   <button onClick={() => setBookingStep(1)}
                     className="flex-1 py-3 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
-                    ← Volver
+                    {t('patient.miSalud.booking.backBtn')}
                   </button>
                   <button
                     onClick={handleBook}
                     disabled={bookingSubmitting || bookingReason.trim().length < 10}
                     className="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors disabled:opacity-50 shadow-sm shadow-blue-100"
                   >
-                    {bookingSubmitting ? 'Confirmando...' : 'Confirmar cita'}
+                    {bookingSubmitting ? t('patient.miSalud.booking.confirming') : t('patient.miSalud.booking.confirmBtn')}
                   </button>
                 </div>
               </div>
@@ -1075,22 +1083,22 @@ export default function MiSaludPage() {
             style={{ animation: 'modal-in 0.2s ease-out' }}>
             {!confirmCancel ? (
               <>
-                <h2 className="text-lg font-bold text-slate-900 mb-2">Detalle de cita</h2>
+                <h2 className="text-lg font-bold text-slate-900 mb-2">{t('patient.miSalud.cancel.appointmentDetail')}</h2>
                 <p className="text-sm text-slate-500 mb-4">
                   Dr(a). {cancelAppt.doctor?.full_name ?? '—'} · {cancelAppt.slot ? `${formatDateLong(cancelAppt.slot.date)} · ${formatTimeAMPM(cancelAppt.slot.start_time)}` : ''}
                 </p>
                 <div className="space-y-2.5">
                   <button onClick={() => { setCancelAppt(null); openRescheduleModal(cancelAppt) }}
                     className="w-full py-3 rounded-xl border-2 border-blue-200 text-sm font-semibold text-blue-600 hover:bg-blue-50 transition-colors">
-                    Reagendar en su lugar
+                    {t('patient.miSalud.cancel.rescheduleInstead')}
                   </button>
                   <button onClick={() => setConfirmCancel(true)}
                     className="w-full py-3 rounded-xl border border-red-200 text-sm font-semibold text-red-600 hover:bg-red-50 transition-colors">
-                    Cancelar cita
+                    {t('patient.miSalud.cancel.cancelAppointment')}
                   </button>
                   <button onClick={() => setCancelAppt(null)}
                     className="w-full py-3 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
-                    Cerrar
+                    {t('patient.miSalud.cancel.close')}
                   </button>
                 </div>
               </>
@@ -1101,7 +1109,7 @@ export default function MiSaludPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                   </svg>
                 </div>
-                <h2 className="text-lg font-bold text-slate-900 text-center mb-1">¿Cancelar esta cita?</h2>
+                <h2 className="text-lg font-bold text-slate-900 text-center mb-1">{t('patient.miSalud.cancel.confirmTitle')}</h2>
                 <p className="text-sm text-slate-500 text-center mb-5 leading-relaxed">
                   Dr(a). {cancelAppt.doctor?.full_name ?? '—'}<br />
                   {cancelAppt.slot ? `${formatDateLong(cancelAppt.slot.date)} · ${formatTimeAMPM(cancelAppt.slot.start_time)}` : ''}
@@ -1112,11 +1120,11 @@ export default function MiSaludPage() {
                 <div className="flex gap-3">
                   <button onClick={() => setConfirmCancel(false)} disabled={cancelling}
                     className="flex-1 py-3 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50">
-                    No, volver
+                    {t('patient.miSalud.cancel.noGoBack')}
                   </button>
                   <button onClick={handleCancel} disabled={cancelling}
                     className="flex-1 py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition-colors disabled:opacity-50">
-                    {cancelling ? 'Cancelando...' : 'Sí, cancelar'}
+                    {cancelling ? t('patient.miSalud.cancel.cancelling') : t('patient.miSalud.cancel.yesCancelBtn')}
                   </button>
                 </div>
               </div>
@@ -1136,7 +1144,7 @@ export default function MiSaludPage() {
             {/* Header */}
             <div className="flex items-start justify-between px-6 pt-6 pb-4 border-b border-slate-100 sticky top-0 bg-white rounded-t-3xl sm:rounded-t-2xl z-10">
               <div>
-                <h2 className="text-lg font-bold text-slate-900">Reagendar consulta</h2>
+                <h2 className="text-lg font-bold text-slate-900">{t('patient.miSalud.reschedule.title')}</h2>
                 <p className="text-sm text-slate-500 mt-0.5">{specialtyLabel(reschedulingAppt.doctor?.specialty)}</p>
               </div>
               <button onClick={() => !rscSaving && setReschedulingAppt(null)}
@@ -1149,17 +1157,17 @@ export default function MiSaludPage() {
 
             {rscStep === 'picker' ? (
               <div className="px-6 py-5">
-                <h3 className="text-sm font-bold text-slate-700 mb-4">Elige una nueva fecha y hora</h3>
+                <h3 className="text-sm font-bold text-slate-700 mb-4">{t('patient.miSalud.reschedule.chooseNew')}</h3>
                 {rscLoading ? (
                   <div className="flex justify-center py-10">
                     <div className="w-6 h-6 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin" />
                   </div>
                 ) : sortedRscDates.length === 0 ? (
                   <div className="text-center py-8">
-                    <p className="text-slate-600 text-sm">No hay horarios disponibles para esta especialidad.</p>
+                    <p className="text-slate-600 text-sm">{t('patient.miSalud.reschedule.noSlots')}</p>
                     <button onClick={() => setReschedulingAppt(null)}
                       className="mt-4 px-5 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
-                      Cerrar
+                      {t('common.close')}
                     </button>
                   </div>
                 ) : (
@@ -1189,7 +1197,7 @@ export default function MiSaludPage() {
                       <button onClick={() => setRscStep('confirming')}
                         className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors shadow-sm"
                         style={{ animation: 'modal-in 0.15s ease-out' }}>
-                        Confirmar cambio →
+                        {t('patient.miSalud.reschedule.confirmChange')}
                       </button>
                     )}
                   </div>
@@ -1200,10 +1208,10 @@ export default function MiSaludPage() {
                 <div className="flex items-center justify-center w-12 h-12 bg-blue-100 rounded-2xl mx-auto mb-4">
                   <span className="text-2xl">📅</span>
                 </div>
-                <h2 className="text-lg font-bold text-slate-900 text-center mb-2">¿Confirmas el cambio?</h2>
+                <h2 className="text-lg font-bold text-slate-900 text-center mb-2">{t('patient.miSalud.reschedule.confirmTitle')}</h2>
                 <p className="text-sm text-slate-500 text-center mb-5 leading-relaxed">
-                  Nueva cita: <strong className="text-slate-700">{rscSlot ? formatDateLong(rscSlot.date) : ''}</strong>{' '}
-                  a las <strong className="text-slate-700">{rscSlot ? formatTimeAMPM(rscSlot.start_time) : ''}</strong>
+                  {t('patient.miSalud.reschedule.newAppointment')} <strong className="text-slate-700">{rscSlot ? formatDateLong(rscSlot.date) : ''}</strong>{' '}
+                  {t('patient.miSalud.reschedule.at')} <strong className="text-slate-700">{rscSlot ? formatTimeAMPM(rscSlot.start_time) : ''}</strong>
                 </p>
                 {rscError && (
                   <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">{rscError}</div>
@@ -1211,11 +1219,11 @@ export default function MiSaludPage() {
                 <div className="flex gap-3">
                   <button onClick={() => setRscStep('picker')} disabled={rscSaving}
                     className="flex-1 py-3 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50">
-                    Volver
+                    {t('patient.miSalud.reschedule.back')}
                   </button>
                   <button onClick={handleConfirmReschedule} disabled={rscSaving}
                     className="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors disabled:opacity-50 shadow-sm">
-                    {rscSaving ? 'Cambiando...' : 'Sí, cambiar'}
+                    {rscSaving ? t('patient.miSalud.reschedule.changing') : t('patient.miSalud.reschedule.yesChange')}
                   </button>
                 </div>
               </div>
@@ -1232,7 +1240,7 @@ export default function MiSaludPage() {
           onClose={() => setFeedbackAppt(null)}
           onSubmitted={() => {
             setFeedbackAppt(null)
-            setFeedbackToast('¡Gracias por tu calificación! 🌟')
+            setFeedbackToast(t('patient.miSalud.feedback.thankYou'))
             setTimeout(() => setFeedbackToast(null), 4000)
             fetchData()
           }}

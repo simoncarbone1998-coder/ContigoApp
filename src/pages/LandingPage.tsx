@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { useTranslation } from 'react-i18next'
+import LanguageToggle from '../components/LanguageToggle'
 
 // ── Scroll animation hook ─────────────────────────────────────────────────────
 function useScrollAnimations() {
@@ -16,16 +18,17 @@ function useScrollAnimations() {
   }, [])
 }
 
-const NAV_LINKS = [
-  { label: 'Beneficios', id: 'para-pacientes' },
-  { label: 'Nosotros',   id: 'nosotros' },
-]
-
 // ── Main component ────────────────────────────────────────────────────────────
 export default function LandingPage() {
   const [scrolled,   setScrolled]   = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [activeTab,  setActiveTab]  = useState<'patient' | 'doctor'>('patient')
+  const { t } = useTranslation()
+
+  const NAV_LINKS = [
+    { label: t('landing.navBenefits'), id: 'para-pacientes' },
+    { label: t('landing.navAbout'),   id: 'nosotros' },
+  ]
 
   useScrollAnimations()
 
@@ -88,13 +91,14 @@ export default function LandingPage() {
 
           {/* Right */}
           <div className="flex items-center gap-3">
+            <LanguageToggle />
             <Link to="/registro?role=doctor"
               className={`hidden md:inline-flex items-center px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
                 scrolled
                   ? 'text-emerald-700 hover:bg-emerald-50'
                   : 'text-white/75 hover:text-white hover:bg-white/10'
               }`}>
-              ¿Eres médico?
+              {t('landing.areYouDoctor')}
             </Link>
             <Link to="/login"
               className={`hidden md:inline-flex items-center px-5 py-2 rounded-xl text-sm font-semibold transition-all duration-200 border-2 ${
@@ -102,14 +106,14 @@ export default function LandingPage() {
                   ? 'border-blue-600 text-blue-600 hover:bg-blue-50'
                   : 'border-white/50 text-white hover:bg-white/10 hover:border-white/80'
               }`}>
-              Iniciar sesión
+              {t('landing.signIn')}
             </Link>
             <button
               onClick={() => setMobileOpen(!mobileOpen)}
               className={`md:hidden p-2 rounded-lg transition-colors ${
                 scrolled ? 'text-slate-700 hover:bg-slate-100' : 'text-white hover:bg-white/10'
               }`}
-              aria-label={mobileOpen ? 'Cerrar menú' : 'Abrir menú'}
+              aria-label={mobileOpen ? t('landing.closeMenu') : t('landing.openMenu')}
             >
               {mobileOpen ? (
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -137,15 +141,15 @@ export default function LandingPage() {
               <div className="border-t border-slate-100 mt-2 pt-2 flex flex-col gap-2">
                 <Link to="/login"
                   className="px-4 py-3 rounded-xl border-2 border-blue-600 text-blue-600 text-sm font-semibold text-center hover:bg-blue-50 transition-colors">
-                  Iniciar sesión
+                  {t('landing.signIn')}
                 </Link>
                 <Link to="/aplicar"
                   className="px-4 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold text-center transition-colors">
-                  Comenzar ahora
+                  {t('landing.startNow')}
                 </Link>
                 <Link to="/registro?role=doctor"
                   className="px-4 py-3 rounded-xl border border-emerald-200 text-emerald-700 text-sm font-semibold text-center hover:bg-emerald-50 transition-colors">
-                  ¿Eres médico? Únete aquí
+                  {t('landing.joinDoctor')}
                 </Link>
               </div>
             </nav>
@@ -169,31 +173,28 @@ export default function LandingPage() {
             {/* Copy */}
             <div>
               <p className="text-xs font-bold uppercase tracking-widest mb-6" style={{ color: '#86efac' }}>
-                Salud Primaria · Colombia
+                {t('landing.heroBadge')}
               </p>
               <h1 className="text-4xl sm:text-5xl lg:text-[3.75rem] font-extrabold text-white leading-[1.08] tracking-tight mb-6">
-                Recupera el control<br />
+                {t('landing.heroTitle1')}<br />
                 <span
                   className="text-transparent bg-clip-text"
                   style={{ backgroundImage: 'linear-gradient(to right, #86efac, #5eead4)' }}
                 >
-                  de tu salud.
+                  {t('landing.heroTitle2')}
                 </span>
               </h1>
-              <p className="text-lg sm:text-xl text-white/78 leading-relaxed mb-10 max-w-xl">
-                Un médico en menos de 36 horas y tus medicamentos en la puerta.
-                Por{' '}
-                <strong className="text-white font-bold">$80.000 COP al mes</strong>
-                .
-              </p>
+              <p className="text-lg sm:text-xl text-white/78 leading-relaxed mb-10 max-w-xl"
+                dangerouslySetInnerHTML={{ __html: t('landing.heroSubtitle') }}
+              />
               <div className="flex flex-wrap gap-4">
                 <Link to="/aplicar"
                   className="px-7 py-3.5 bg-white text-[#1e3a5f] font-bold rounded-2xl hover:scale-[1.03] hover:bg-blue-50 transition-all duration-200 shadow-xl shadow-black/25 text-sm">
-                  Comenzar ahora
+                  {t('landing.startNow')}
                 </Link>
                 <button onClick={() => goTo('para-pacientes')}
                   className="px-7 py-3.5 border-2 border-white/40 text-white font-semibold rounded-2xl hover:bg-white/10 hover:border-white/70 transition-all duration-200 text-sm">
-                  Conoce más
+                  {t('landing.learnMore')}
                 </button>
               </div>
             </div>
@@ -222,9 +223,9 @@ export default function LandingPage() {
             <div>
               {/* Header */}
               <div className="mb-10 fade-up">
-                <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-3">Beneficios</p>
+                <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-3">{t('landing.benefitsTitle')}</p>
                 <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 mb-8">
-                  Diseñado para ti
+                  {t('landing.benefitsHeading')}
                 </h2>
 
                 {/* Toggle pill */}
@@ -236,7 +237,7 @@ export default function LandingPage() {
                       ? { background: '#1e3a5f', color: '#fff' }
                       : { background: 'transparent', color: '#64748b' }}
                   >
-                    Soy paciente
+                    {t('landing.iAmPatient')}
                   </button>
                   <button
                     onClick={() => setActiveTab('doctor')}
@@ -245,7 +246,7 @@ export default function LandingPage() {
                       ? { background: '#16a34a', color: '#fff' }
                       : { background: 'transparent', color: '#64748b' }}
                   >
-                    Soy médico
+                    {t('landing.iAmDoctor')}
                   </button>
                 </div>
               </div>
@@ -255,19 +256,19 @@ export default function LandingPage() {
                 <div key="patient" style={{ animation: 'modal-in 0.2s ease-out' }}>
                   <div className="grid sm:grid-cols-2 gap-4 mb-6">
                     {[
-                      { emoji: '🕐', title: 'Cita en 36 horas',          desc: 'Sin esperas de semanas' },
-                      { emoji: '💊', title: 'Medicamentos a domicilio',   desc: 'Tu receta llega a tu puerta' },
-                      { emoji: '📋', title: 'Historia médica digital',    desc: 'Todo tu historial en un lugar' },
-                      { emoji: '📱', title: 'Telemedicina',               desc: 'Consulta sin salir de casa' },
+                      { emoji: '🕐', titleKey: 'landing.benefitAppointment', descKey: 'landing.benefitAppointmentDesc' },
+                      { emoji: '💊', titleKey: 'landing.benefitMeds',        descKey: 'landing.benefitMedsDesc' },
+                      { emoji: '📋', titleKey: 'landing.benefitHistory',     descKey: 'landing.benefitHistoryDesc' },
+                      { emoji: '📱', titleKey: 'landing.benefitTele',        descKey: 'landing.benefitTeleDesc' },
                     ].map((card) => (
                       <div
-                        key={card.title}
+                        key={card.titleKey}
                         className="flex items-start gap-4 p-5 rounded-2xl border border-slate-200 bg-white hover:shadow-md transition-shadow duration-200"
                       >
                         <span className="text-2xl shrink-0 mt-0.5">{card.emoji}</span>
                         <div>
-                          <p className="text-sm font-medium text-slate-900">{card.title}</p>
-                          <p className="text-[13px] text-slate-500 mt-0.5">{card.desc}</p>
+                          <p className="text-sm font-medium text-slate-900">{t(card.titleKey)}</p>
+                          <p className="text-[13px] text-slate-500 mt-0.5">{t(card.descKey)}</p>
                         </div>
                       </div>
                     ))}
@@ -275,11 +276,11 @@ export default function LandingPage() {
 
                   {/* Price card */}
                   <div className="rounded-2xl p-8 text-center" style={{ background: '#f0f7ff' }}>
-                    <p className="text-3xl font-extrabold text-blue-700 mb-1">$80.000 COP / mes</p>
-                    <p className="text-sm text-slate-500 mb-6">Menos de lo que ya gastas en soluciones informales</p>
+                    <p className="text-3xl font-extrabold text-blue-700 mb-1">{t('landing.priceTag')}</p>
+                    <p className="text-sm text-slate-500 mb-6">{t('landing.priceDesc')}</p>
                     <Link to="/aplicar"
                       className="inline-flex items-center px-7 py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl transition-colors shadow-sm shadow-blue-100">
-                      Comenzar ahora
+                      {t('landing.startNow')}
                     </Link>
                   </div>
                 </div>
@@ -290,18 +291,18 @@ export default function LandingPage() {
                 <div key="doctor" style={{ animation: 'modal-in 0.2s ease-out' }}>
                   <div className="grid sm:grid-cols-3 gap-4">
                     {[
-                      { emoji: '📅', title: 'Agenda predecible',  desc: 'Pacientes que ya están pagando' },
-                      { emoji: '💰', title: 'Pago garantizado',   desc: 'Sin contratos OPS ni demoras' },
-                      { emoji: '⚡', title: 'Menos admin',        desc: 'Más tiempo para tus pacientes' },
+                      { emoji: '📅', titleKey: 'landing.doctorBenefitSchedule', descKey: 'landing.doctorBenefitScheduleDesc' },
+                      { emoji: '💰', titleKey: 'landing.doctorBenefitPayment',  descKey: 'landing.doctorBenefitPaymentDesc' },
+                      { emoji: '⚡', titleKey: 'landing.doctorBenefitAdmin',    descKey: 'landing.doctorBenefitAdminDesc' },
                     ].map((card) => (
                       <div
-                        key={card.title}
+                        key={card.titleKey}
                         className="flex items-start gap-4 p-5 rounded-2xl border border-slate-200 bg-white hover:shadow-md transition-shadow duration-200"
                       >
                         <span className="text-2xl shrink-0 mt-0.5">{card.emoji}</span>
                         <div>
-                          <p className="text-sm font-medium text-slate-900">{card.title}</p>
-                          <p className="text-[13px] text-slate-500 mt-0.5">{card.desc}</p>
+                          <p className="text-sm font-medium text-slate-900">{t(card.titleKey)}</p>
+                          <p className="text-[13px] text-slate-500 mt-0.5">{t(card.descKey)}</p>
                         </div>
                       </div>
                     ))}
@@ -312,8 +313,8 @@ export default function LandingPage() {
 
             {/* RIGHT — chat widget */}
             <div className="fade-up lg:sticky lg:top-24">
-              <p className="text-2xl font-extrabold text-slate-900 mb-2">Pregúntanos lo que quieras</p>
-              <p className="text-sm text-slate-500 mb-5">Resolvemos tus dudas sobre el plan al instante.</p>
+              <p className="text-2xl font-extrabold text-slate-900 mb-2">{t('landing.chatTitle')}</p>
+              <p className="text-sm text-slate-500 mb-5">{t('landing.chatSubtitle')}</p>
               <ChatWidget />
             </div>
 
@@ -336,33 +337,30 @@ export default function LandingPage() {
 
         <div className="relative max-w-4xl mx-auto px-4 sm:px-6 text-center">
           <p className="text-xs font-bold uppercase tracking-widest text-white/45 mb-6 fade-up">
-            Nuestra Misión
+            {t('landing.missionBadge')}
           </p>
           <h2 className="text-3xl sm:text-5xl font-extrabold text-white leading-tight mb-10 fade-up">
-            Obsesionados con cambiar<br />
-            la salud en Colombia.
+            {t('landing.missionHeading1')}<br />
+            {t('landing.missionHeading2')}
           </h2>
 
           <div className="max-w-2xl mx-auto space-y-6 mb-14 fade-up">
             <p className="text-lg text-white/78 leading-relaxed">
-              El sistema de salud colombiano dejó de funcionar para las personas que más lo necesitan.
-              52 millones de colombianos están nominalmente asegurados — pero efectivamente desatendidos.
+              {t('landing.missionP1')}
             </p>
             <p className="text-lg text-white/78 leading-relaxed">
-              Contigo nació para cerrar esa brecha. Creemos que acceder a un médico de calidad no
-              debería requerir madrugar a las 2am a hacer fila, pagar sobornos informales, ni litigar
-              contra tu propia aseguradora.
+              {t('landing.missionP2')}
             </p>
           </div>
 
           <p className="text-2xl sm:text-3xl font-bold italic mb-14 fade-up" style={{ color: '#86efac' }}>
-            "Tu salud merece mejor que el sistema que tienes hoy."
+            {t('landing.missionQuote')}
           </p>
 
           <div className="fade-up">
             <Link to="/aplicar"
               className="inline-flex items-center px-9 py-4 bg-white text-[#1e3a5f] font-bold rounded-2xl hover:scale-[1.03] transition-all duration-200 shadow-2xl text-sm">
-              Únete a Contigo
+              {t('landing.joinContigo')}
             </Link>
           </div>
         </div>
@@ -376,7 +374,7 @@ export default function LandingPage() {
               <p className="font-extrabold text-2xl mb-1.5">
                 <span style={{ color: '#4ade80' }}>con</span><span className="text-white">tigo</span>
               </p>
-              <p className="text-white/40 text-sm">Recupera el control de tu salud.</p>
+              <p className="text-white/40 text-sm">{t('landing.footerTagline')}</p>
             </div>
 
             <nav className="flex flex-wrap justify-center gap-x-8 gap-y-2">
@@ -394,7 +392,7 @@ export default function LandingPage() {
 
           <div className="mt-10 pt-6 border-t border-white/8 text-center">
             <p className="text-white/25 text-sm">
-              © 2026 Contigo. Todos los derechos reservados. Colombia 🇨🇴
+              {t('landing.footerCopyright')}
             </p>
           </div>
         </div>
@@ -411,49 +409,9 @@ type ChatMsg = { id: string; role: 'user' | 'assistant'; content: string; ts: Da
 
 const CHAT_LIMIT = 5
 
-const LABELS = {
-  es: {
-    title:       'Asistente Contigo',
-    subtitle:    'Pregunta sobre nuestro plan',
-    placeholder: 'Escribe tu pregunta...',
-    remaining:   (n: number) => `Te quedan ${n} pregunta${n !== 1 ? 's' : ''}`,
-    typing:      'Escribiendo',
-    limitTitle:  'Has alcanzado el límite de preguntas gratuitas.',
-    limitSub:    '¿Quieres que un asesor te contacte?',
-    namePh:      'Nombre',
-    emailPh:     'Email',
-    phonePh:     'Teléfono (opcional)',
-    submit:      'Solicitar contacto →',
-    submitting:  'Enviando...',
-    thanks:      '¡Listo! Te contactaremos pronto.',
-    error:       'Lo siento, tuve un problema técnico. Por favor intenta de nuevo.',
-  },
-  en: {
-    title:       'Contigo Assistant',
-    subtitle:    'Ask about our plan',
-    placeholder: 'Type your question...',
-    remaining:   (n: number) => `You have ${n} question${n !== 1 ? 's' : ''} left`,
-    typing:      'Typing',
-    limitTitle:  'You have reached your free question limit.',
-    limitSub:    'Would you like an advisor to contact you?',
-    namePh:      'Name',
-    emailPh:     'Email',
-    phonePh:     'Phone (optional)',
-    submit:      'Request contact →',
-    submitting:  'Sending...',
-    thanks:      'Done! We will contact you soon.',
-    error:       'Sorry, I had a technical problem. Please try again.',
-  },
-}
-
-const EN_MARKERS = ['what','how','where','when','why','does','can','will','have','are','the','and','for','with','is','my','me']
-
-function detectLang(text: string): 'es' | 'en' {
-  const words = text.toLowerCase().split(/\s+/)
-  return words.filter(w => EN_MARKERS.includes(w)).length >= 2 ? 'en' : 'es'
-}
-
 function ChatWidget() {
+  const { t, i18n } = useTranslation()
+
   const initCount = (): number => {
     try { return Math.min(parseInt(sessionStorage.getItem('contigo_chat_count') ?? '0') || 0, CHAT_LIMIT) }
     catch { return 0 }
@@ -462,14 +420,12 @@ function ChatWidget() {
   const [msgs, setMsgs] = useState<ChatMsg[]>([{
     id: 'welcome',
     role: 'assistant',
-    content: '¡Hola! 👋 Soy el asistente de Contigo.\nPuedo responder tus preguntas sobre nuestro plan de salud. ¿En qué puedo ayudarte?',
+    content: t('landing.chat.welcome'),
     ts: new Date(),
   }])
   const [input,       setInput]       = useState('')
   const [loading,     setLoading]     = useState(false)
   const [msgCount,    setMsgCount]    = useState(initCount)
-  const [lang,        setLang]        = useState<'es' | 'en'>('es')
-  const [langSet,     setLangSet]     = useState(false)
   const [limitReached, setLimitReached] = useState(() => initCount() >= CHAT_LIMIT)
 
   // Lead form
@@ -482,6 +438,12 @@ function ChatWidget() {
   const bottomRef  = useRef<HTMLDivElement>(null)
   const historyRef = useRef<{ role: 'user' | 'assistant'; content: string }[]>([])
 
+  // Update welcome message when language changes
+  useEffect(() => {
+    setMsgs(prev => prev.map(m => m.id === 'welcome' ? { ...m, content: t('landing.chat.welcome') } : m))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [i18n.language])
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [msgs, loading])
@@ -489,9 +451,6 @@ function ChatWidget() {
   async function sendMessage() {
     const text = input.trim()
     if (!text || loading || limitReached) return
-
-    const currentLang = langSet ? lang : detectLang(text)
-    if (!langSet) { setLang(currentLang); setLangSet(true) }
 
     const userMsg: ChatMsg = { id: Date.now().toString(), role: 'user', content: text, ts: new Date() }
     setMsgs(prev => [...prev, userMsg])
@@ -514,7 +473,7 @@ function ChatWidget() {
     } catch {
       const errMsg: ChatMsg = {
         id: (Date.now() + 1).toString(), role: 'assistant',
-        content: LABELS[currentLang].error, ts: new Date(),
+        content: t('landing.chat.error'), ts: new Date(),
       }
       setMsgs(prev => [...prev, errMsg])
       historyRef.current = [...prevHistory, { role: 'user', content: text }]
@@ -560,7 +519,6 @@ function ChatWidget() {
     setLeadDone(true)
   }
 
-  const l = LABELS[lang]
   const remaining = CHAT_LIMIT - msgCount
 
   return (
@@ -571,12 +529,12 @@ function ChatWidget() {
       <div className="flex items-center gap-3 px-4 py-3 shrink-0"
         style={{ background: 'linear-gradient(135deg, #1e3a5f, #16a34a)' }}>
         <div className="flex-1 min-w-0">
-          <p className="text-white font-bold text-sm leading-tight">{l.title}</p>
-          <p className="text-white/65 text-xs">{l.subtitle}</p>
+          <p className="text-white font-bold text-sm leading-tight">{t('landing.chat.title')}</p>
+          <p className="text-white/65 text-xs">{t('landing.chat.subtitle')}</p>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-          <span className="text-white/50 text-xs">online</span>
+          <span className="text-white/50 text-xs">{t('landing.chat.online')}</span>
         </div>
       </div>
 
@@ -601,7 +559,7 @@ function ChatWidget() {
           <div className="flex justify-start">
             <div className="bg-white rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm">
               <div className="flex items-center gap-1.5">
-                <span className="text-xs text-slate-400">{l.typing}</span>
+                <span className="text-xs text-slate-400">{t('landing.chat.typing')}</span>
                 {[0, 150, 300].map((d) => (
                   <span key={d} className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce"
                     style={{ animationDelay: `${d}ms` }} />
@@ -617,24 +575,24 @@ function ChatWidget() {
       {limitReached ? (
         <div className="p-4 border-t border-slate-100 shrink-0">
           {leadDone ? (
-            <p className="text-center text-sm font-semibold text-emerald-600 py-2">✅ {l.thanks}</p>
+            <p className="text-center text-sm font-semibold text-emerald-600 py-2">✅ {t('landing.chat.thanks')}</p>
           ) : (
             <div className="space-y-2">
-              <p className="text-xs font-bold text-slate-700">{l.limitTitle}</p>
-              <p className="text-xs text-slate-500">{l.limitSub}</p>
+              <p className="text-xs font-bold text-slate-700">{t('landing.chat.limitTitle')}</p>
+              <p className="text-xs text-slate-500">{t('landing.chat.limitSub')}</p>
               <input value={leadName} onChange={(e) => setLeadName(e.target.value)}
-                placeholder={l.namePh}
+                placeholder={t('landing.chat.namePh')}
                 className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
               <input value={leadEmail} onChange={(e) => setLeadEmail(e.target.value)}
-                placeholder={l.emailPh} type="email"
+                placeholder={t('landing.chat.emailPh')} type="email"
                 className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
               <input value={leadPhone} onChange={(e) => setLeadPhone(e.target.value)}
-                placeholder={l.phonePh}
+                placeholder={t('landing.chat.phonePh')}
                 className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
               <button onClick={submitLead}
                 disabled={!leadName.trim() || !leadEmail.trim() || leadSending}
                 className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-colors">
-                {leadSending ? l.submitting : l.submit}
+                {leadSending ? t('landing.chat.submitting') : t('landing.chat.submit')}
               </button>
             </div>
           )}
@@ -646,7 +604,7 @@ function ChatWidget() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }}
-              placeholder={l.placeholder}
+              placeholder={t('landing.chat.placeholder')}
               disabled={loading}
               className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-50"
             />
@@ -660,7 +618,7 @@ function ChatWidget() {
           </div>
           {msgCount > 0 && (
             <p className={`text-[11px] mt-1.5 text-center ${remaining <= 2 ? 'text-amber-500 font-semibold' : 'text-slate-400'}`}>
-              {l.remaining(remaining)}
+              {t('landing.chat.remaining', { count: remaining })}
             </p>
           )}
         </div>
@@ -670,11 +628,12 @@ function ChatWidget() {
 }
 
 function HeroCard() {
+  const { t } = useTranslation()
   return (
     <div className="relative py-10 px-6">
       {/* Main appointment card */}
       <div className="relative z-10 bg-white rounded-3xl shadow-2xl p-6 w-80">
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-4">Próxima cita</p>
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-4">{t('landing.heroCardNextAppointment')}</p>
 
         <div className="flex items-center gap-3 mb-5">
           <div className="w-12 h-12 rounded-2xl bg-blue-100 flex items-center justify-center shrink-0">
@@ -682,24 +641,24 @@ function HeroCard() {
           </div>
           <div>
             <p className="font-bold text-slate-900">Dr. Carlos Méndez</p>
-            <p className="text-xs text-slate-500">Medicina General</p>
+            <p className="text-xs text-slate-500">{t('landing.heroCardGeneralMedicine')}</p>
           </div>
         </div>
 
         <div className="space-y-2 mb-5">
           {[
-            { label: 'Fecha',    value: 'Hoy, 3:30 PM' },
-            { label: 'Duración', value: '30 minutos' },
+            { labelKey: 'landing.heroCardDateLabel',     valueKey: 'landing.heroCardDateValue' },
+            { labelKey: 'landing.heroCardDurationLabel', valueKey: 'landing.heroCardDurationValue' },
           ].map((row) => (
-            <div key={row.label} className="flex justify-between">
-              <span className="text-xs text-slate-400">{row.label}</span>
-              <span className="text-xs font-semibold text-slate-700">{row.value}</span>
+            <div key={row.labelKey} className="flex justify-between">
+              <span className="text-xs text-slate-400">{t(row.labelKey)}</span>
+              <span className="text-xs font-semibold text-slate-700">{t(row.valueKey)}</span>
             </div>
           ))}
         </div>
 
         <div className="flex items-center justify-between px-4 py-3 bg-green-50 rounded-xl border border-green-100">
-          <span className="text-sm font-semibold text-green-700">Confirmada</span>
+          <span className="text-sm font-semibold text-green-700">{t('landing.heroCardConfirmed')}</span>
           <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
           </svg>
@@ -711,10 +670,10 @@ function HeroCard() {
         <div className="flex items-center gap-2.5">
           <span className="text-xl shrink-0">💊</span>
           <div>
-            <p className="text-xs font-bold text-slate-800">Medicamentos en camino</p>
+            <p className="text-xs font-bold text-slate-800">{t('landing.heroCardMedsLabel')}</p>
             <div className="flex items-center gap-1.5 mt-0.5">
               <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shrink-0" />
-              <span className="text-xs text-green-600 font-semibold">En camino</span>
+              <span className="text-xs text-green-600 font-semibold">{t('landing.heroCardMedsStatus')}</span>
             </div>
           </div>
         </div>

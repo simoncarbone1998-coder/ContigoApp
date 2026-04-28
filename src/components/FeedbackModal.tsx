@@ -1,11 +1,8 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { supabase } from '../lib/supabase'
 import { specialtyLabel } from '../lib/types'
 import type { Appointment } from '../lib/types'
-
-const RATING_LABELS: Record<number, string> = {
-  1: 'Muy mala', 2: 'Mala', 3: 'Regular', 4: 'Buena', 5: 'Excelente',
-}
 
 interface Props {
   appointment: Appointment
@@ -15,11 +12,20 @@ interface Props {
 }
 
 export default function FeedbackModal({ appointment, patientId, onClose, onSubmitted }: Props) {
+  const { t } = useTranslation()
   const [rating,     setRating]     = useState(0)
   const [hovered,    setHovered]    = useState(0)
   const [comment,    setComment]    = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error,      setError]      = useState<string | null>(null)
+
+  const RATING_LABELS: Record<number, string> = {
+    1: t('components.feedback.ratingVeryBad'),
+    2: t('components.feedback.ratingBad'),
+    3: t('components.feedback.ratingAverage'),
+    4: t('components.feedback.ratingGood'),
+    5: t('components.feedback.ratingExcellent'),
+  }
 
   async function handleSubmit() {
     if (rating === 0 || submitting) return
@@ -34,7 +40,7 @@ export default function FeedbackModal({ appointment, patientId, onClose, onSubmi
     })
     setSubmitting(false)
     if (err) {
-      setError('No se pudo enviar la calificación. Intenta de nuevo.')
+      setError(t('components.feedback.error'))
     } else {
       onSubmitted()
     }
@@ -54,8 +60,8 @@ export default function FeedbackModal({ appointment, patientId, onClose, onSubmi
         {/* Header */}
         <div className="text-center mb-6">
           <div className="text-3xl mb-3">⭐</div>
-          <h2 className="text-xl font-bold text-slate-900 mb-1">¿Cómo fue tu consulta?</h2>
-          <p className="text-sm text-slate-500">Tu opinión nos ayuda a mejorar</p>
+          <h2 className="text-xl font-bold text-slate-900 mb-1">{t('components.feedback.title')}</h2>
+          <p className="text-sm text-slate-500">{t('components.feedback.subtitle')}</p>
         </div>
 
         {/* Doctor card */}
@@ -85,14 +91,14 @@ export default function FeedbackModal({ appointment, patientId, onClose, onSubmi
                 onMouseLeave={() => setHovered(0)}
                 className="text-4xl leading-none transition-transform hover:scale-110 focus:outline-none"
                 style={{ color: star <= display ? '#f59e0b' : '#d1d5db' }}
-                aria-label={`${star} estrella${star > 1 ? 's' : ''}`}
+                aria-label={`${star} ${star === 1 ? 'star' : 'stars'}`}
               >
                 ★
               </button>
             ))}
           </div>
           <p className="text-xs text-slate-400 h-4">
-            {rating === 0 ? 'Toca para calificar' : RATING_LABELS[rating]}
+            {rating === 0 ? t('components.feedback.tapToRate') : RATING_LABELS[rating]}
           </p>
         </div>
 
@@ -101,7 +107,7 @@ export default function FeedbackModal({ appointment, patientId, onClose, onSubmi
           value={comment}
           onChange={(e) => setComment(e.target.value.slice(0, 500))}
           rows={3}
-          placeholder="¿Quieres dejarnos algún comentario? (opcional)"
+          placeholder={t('components.feedback.commentPlaceholder')}
           className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors resize-none"
         />
         <p className="text-xs text-slate-400 text-right mt-1 mb-5">{comment.length}/500</p>
@@ -117,14 +123,14 @@ export default function FeedbackModal({ appointment, patientId, onClose, onSubmi
             disabled={rating === 0 || submitting}
             className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shadow-blue-100"
           >
-            {submitting ? 'Enviando...' : 'Enviar calificación'}
+            {submitting ? t('components.feedback.submitting') : t('components.feedback.submit')}
           </button>
           <button
             onClick={onClose}
             disabled={submitting}
             className="w-full py-3 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50"
           >
-            Ahora no
+            {t('components.feedback.notNow')}
           </button>
         </div>
       </div>

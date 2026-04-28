@@ -1,22 +1,26 @@
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { useTranslation } from 'react-i18next'
+import LanguageToggle from './LanguageToggle'
 import type { Role } from '../lib/types'
 
-const roleLinks: Record<Role, { to: string; label: string }[]> = {
+type NavItem = { to: string; labelKey: string }
+
+const roleLinks: Record<Role, NavItem[]> = {
   patient: [
-    { to: '/paciente/mi-salud',  label: 'Mi Salud' },
-    { to: '/paciente/pastillas', label: 'Pastillas' },
-    { to: '/paciente/examenes',  label: 'Exámenes' },
-    { to: '/paciente/perfil',    label: 'Perfil' },
+    { to: '/paciente/mi-salud',  labelKey: 'nav.myHealth' },
+    { to: '/paciente/pastillas', labelKey: 'nav.medications' },
+    { to: '/paciente/examenes',  labelKey: 'nav.labTests' },
+    { to: '/paciente/perfil',    labelKey: 'nav.profile' },
   ],
   doctor: [
-    { to: '/doctor/perfil',    label: 'Mi Perfil' },
-    { to: '/doctor/agenda',    label: 'Mi Agenda' },
-    { to: '/doctor/finanzas',  label: 'Finanzas' },
+    { to: '/doctor/perfil',    labelKey: 'nav.myProfile' },
+    { to: '/doctor/agenda',    labelKey: 'nav.mySchedule' },
+    { to: '/doctor/finanzas',  labelKey: 'nav.earnings' },
   ],
-  admin:      [{ to: '/admin/dashboard', label: 'Panel de Admin' }],
-  laboratory: [{ to: '/lab/dashboard',   label: 'Portal Aliado' }],
+  admin:      [{ to: '/admin/dashboard', labelKey: 'nav.adminPanel' }],
+  laboratory: [{ to: '/lab/dashboard',   labelKey: 'nav.alliedPortal' }],
 }
 
 function getInitials(name: string | null, email: string | null): string {
@@ -31,6 +35,7 @@ function getInitials(name: string | null, email: string | null): string {
 export default function NavBar() {
   const { profile, signOut } = useAuth()
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
@@ -79,84 +84,83 @@ export default function NavBar() {
                 }`
               }
             >
-              {link.label}
+              {t(link.labelKey)}
             </NavLink>
           ))}
         </nav>
 
-        {/* User avatar + dropdown */}
-        <div className="relative shrink-0" ref={dropdownRef}>
-          <button
-            onClick={() => setDropdownOpen((o) => !o)}
-            className="flex items-center gap-2 p-1 rounded-xl hover:bg-slate-50 transition-colors"
-            aria-label="Menú de usuario"
-            aria-expanded={dropdownOpen}
-          >
-            {/* Avatar */}
-            {profile.avatar_url ? (
-              <img
-                src={profile.avatar_url}
-                alt={profile.full_name ?? 'Avatar'}
-                style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }}
-                className="ring-2 ring-slate-200 hover:ring-blue-300 transition-all shrink-0"
-              />
-            ) : (
-              <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center shrink-0 ring-2 ring-transparent hover:ring-blue-300 transition-all">
-                <span className="text-white text-xs font-bold">{initials}</span>
+        {/* Right: language toggle + user menu */}
+        <div className="flex items-center gap-2 shrink-0">
+          <LanguageToggle />
+
+          {/* User avatar + dropdown */}
+          <div className="relative" ref={dropdownRef}>
+            <button
+              onClick={() => setDropdownOpen((o) => !o)}
+              className="flex items-center gap-2 p-1 rounded-xl hover:bg-slate-50 transition-colors"
+              aria-label={t('nav.userMenu')}
+              aria-expanded={dropdownOpen}
+            >
+              {profile.avatar_url ? (
+                <img
+                  src={profile.avatar_url}
+                  alt={profile.full_name ?? 'Avatar'}
+                  style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }}
+                  className="ring-2 ring-slate-200 hover:ring-blue-300 transition-all shrink-0"
+                />
+              ) : (
+                <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center shrink-0 ring-2 ring-transparent hover:ring-blue-300 transition-all">
+                  <span className="text-white text-xs font-bold">{initials}</span>
+                </div>
+              )}
+
+              <span className="hidden sm:block text-slate-600 text-sm font-medium truncate max-w-28">
+                {profile.full_name?.split(' ')[0] ?? profile.email}
+              </span>
+
+              <svg
+                className={`hidden sm:block w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${dropdownOpen ? 'rotate-180' : ''}`}
+                fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            {dropdownOpen && (
+              <div
+                className="absolute right-0 mt-2 w-52 bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden z-50"
+                style={{ animation: 'modal-in 0.15s ease-out' }}
+              >
+                <div className="px-4 py-3 border-b border-slate-100">
+                  <p className="text-sm font-semibold text-slate-900 truncate">
+                    {profile.full_name ?? profile.email}
+                  </p>
+                  <p className="text-xs text-slate-400 truncate mt-0.5">{profile.email}</p>
+                </div>
+
+                <div className="py-1">
+                  <button
+                    onClick={() => { setDropdownOpen(false); navigate(profileLink) }}
+                    className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-3"
+                  >
+                    <svg className="w-4 h-4 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                    {t('nav.myProfileLink')}
+                  </button>
+                  <button
+                    onClick={handleSignOut}
+                    className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors flex items-center gap-3"
+                  >
+                    <svg className="w-4 h-4 text-red-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
+                    {t('nav.signOut')}
+                  </button>
+                </div>
               </div>
             )}
-
-            {/* First name (desktop) */}
-            <span className="hidden sm:block text-slate-600 text-sm font-medium truncate max-w-28">
-              {profile.full_name?.split(' ')[0] ?? profile.email}
-            </span>
-
-            {/* Chevron */}
-            <svg
-              className={`hidden sm:block w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${dropdownOpen ? 'rotate-180' : ''}`}
-              fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-
-          {/* Dropdown menu */}
-          {dropdownOpen && (
-            <div
-              className="absolute right-0 mt-2 w-52 bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden z-50"
-              style={{ animation: 'modal-in 0.15s ease-out' }}
-            >
-              {/* User info header */}
-              <div className="px-4 py-3 border-b border-slate-100">
-                <p className="text-sm font-semibold text-slate-900 truncate">
-                  {profile.full_name ?? profile.email}
-                </p>
-                <p className="text-xs text-slate-400 truncate mt-0.5">{profile.email}</p>
-              </div>
-
-              {/* Actions */}
-              <div className="py-1">
-                <button
-                  onClick={() => { setDropdownOpen(false); navigate(profileLink) }}
-                  className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-3"
-                >
-                  <svg className="w-4 h-4 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                  </svg>
-                  Mi perfil
-                </button>
-                <button
-                  onClick={handleSignOut}
-                  className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors flex items-center gap-3"
-                >
-                  <svg className="w-4 h-4 text-red-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                  </svg>
-                  Salir
-                </button>
-              </div>
-            </div>
-          )}
+          </div>
         </div>
 
       </div>

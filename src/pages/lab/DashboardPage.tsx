@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useLabContext } from '../../contexts/LabContext'
 import LabNavBar from '../../components/LabNavBar'
+import { useTranslation } from 'react-i18next'
 
 type Stats = { pending_orders: number; today_appts: number; month_completed: number; total_completed: number }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -11,6 +12,7 @@ function formatTime(t: string) { return t?.slice(0, 5) ?? '—' }
 
 export default function LabDashboardPage() {
   const { lab } = useLabContext()
+  const { t } = useTranslation()
   const [stats,      setStats]      = useState<Stats | null>(null)
   const [todayAppts, setTodayAppts] = useState<TodayAppt[]>([])
   const [loading,    setLoading]    = useState(true)
@@ -77,16 +79,16 @@ export default function LabDashboardPage() {
     }
 
     setUploadId(null)
-    showToast('✅ Resultado subido. Paciente y médico notificados.')
+    showToast(t('lab.dashboard.uploadSuccess'))
     await fetchData()
     setUploading(false)
   }
 
   const statCards = stats ? [
-    { label: 'Órdenes pendientes',   value: stats.pending_orders,  bg: 'bg-orange-50',  text: 'text-orange-700',  icon: '📋' },
-    { label: 'Citas hoy',            value: stats.today_appts,     bg: 'bg-blue-50',    text: 'text-blue-700',    icon: '📅' },
-    { label: 'Completados este mes', value: stats.month_completed, bg: 'bg-emerald-50', text: 'text-emerald-700', icon: '✅' },
-    { label: 'Total realizados',     value: stats.total_completed, bg: 'bg-violet-50',  text: 'text-violet-700',  icon: '🔬' },
+    { label: t('lab.dashboard.pendingOrders'),   value: stats.pending_orders,  bg: 'bg-orange-50',  text: 'text-orange-700',  icon: '📋' },
+    { label: t('lab.dashboard.todayAppointments'), value: stats.today_appts,   bg: 'bg-blue-50',    text: 'text-blue-700',    icon: '📅' },
+    { label: t('lab.dashboard.monthCompleted'),  value: stats.month_completed, bg: 'bg-emerald-50', text: 'text-emerald-700', icon: '✅' },
+    { label: t('lab.dashboard.totalCompleted'),  value: stats.total_completed, bg: 'bg-violet-50',  text: 'text-violet-700',  icon: '🔬' },
   ] : []
 
   return (
@@ -101,7 +103,7 @@ export default function LabDashboardPage() {
 
       <main className="max-w-5xl mx-auto px-4 py-8 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
+          <h1 className="text-2xl font-bold text-slate-900">{t('lab.dashboard.title')}</h1>
           <p className="text-slate-500 text-sm mt-1">{lab?.name} · {lab?.city}</p>
         </div>
 
@@ -123,14 +125,14 @@ export default function LabDashboardPage() {
 
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
               <h2 className="text-base font-bold text-slate-900 mb-5">
-                📅 Citas de hoy
+                📅 {t('lab.dashboard.todayTitle')}
                 {todayAppts.length > 0 && (
                   <span className="ml-2 text-xs font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">{todayAppts.length}</span>
                 )}
               </h2>
 
               {todayAppts.length === 0 ? (
-                <p className="text-slate-500 text-sm text-center py-8">No hay citas programadas para hoy.</p>
+                <p className="text-slate-500 text-sm text-center py-8">{t('lab.dashboard.noToday')}</p>
               ) : (
                 <div className="space-y-3">
                   {todayAppts.map((appt: TodayAppt) => (
@@ -148,7 +150,7 @@ export default function LabDashboardPage() {
                         disabled={uploading}
                         className="shrink-0 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-colors disabled:opacity-50"
                       >
-                        {uploading && uploadId === appt.id ? 'Subiendo...' : 'Subir resultado'}
+                        {uploading && uploadId === appt.id ? t('common.uploading') : t('lab.dashboard.uploadResult')}
                       </button>
                     </div>
                   ))}

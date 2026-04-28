@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useLabContext } from '../../contexts/LabContext'
 import LabNavBar from '../../components/LabNavBar'
+import { useTranslation } from 'react-i18next'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type LabData = any
@@ -22,6 +23,7 @@ async function getSignedUrl(path: string): Promise<string | null> {
 
 export default function LabPerfilPage() {
   const { lab: session, refreshLab } = useLabContext()
+  const { t } = useTranslation()
   const [lab,      setLab]      = useState<LabData | null>(null)
   const [exams,    setExams]    = useState<{ exam_name: string; category: string }[]>([])
   const [loading,  setLoading]  = useState(true)
@@ -155,7 +157,7 @@ export default function LabPerfilPage() {
 
       <main className="max-w-3xl mx-auto px-4 py-8 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Perfil del centro</h1>
+          <h1 className="text-2xl font-bold text-slate-900">{t('lab.perfil.title')}</h1>
           <p className="text-slate-500 text-sm mt-1">Información de tu centro de diagnóstico.</p>
         </div>
 
@@ -167,7 +169,7 @@ export default function LabPerfilPage() {
           <>
             {/* Editable fields */}
             <form onSubmit={handleSave} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4">
-              <h2 className="text-base font-bold text-slate-900">Información editable</h2>
+              <h2 className="text-base font-bold text-slate-900">{t('lab.perfil.editableInfo')}</h2>
               {[
                 { id: 'name',    label: 'Nombre del centro', value: name,    set: setName,    type: 'text' },
                 { id: 'phone',   label: 'Teléfono',          value: phone,   set: setPhone,   type: 'tel' },
@@ -188,7 +190,7 @@ export default function LabPerfilPage() {
 
             {/* Read-only fields */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-3">
-              <h2 className="text-base font-bold text-slate-900 mb-1">Información del registro</h2>
+              <h2 className="text-base font-bold text-slate-900 mb-1">{t('lab.perfil.registrationInfo')}</h2>
               <p className="text-xs text-slate-400">Para cambiar estos campos contacta a hola@contigomedicina.com</p>
               {[
                 { label: 'Correo',         value: lab?.email },
@@ -204,7 +206,7 @@ export default function LabPerfilPage() {
             {/* Exams */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4">
               <div>
-                <h2 className="text-base font-bold text-slate-900">Exámenes disponibles</h2>
+                <h2 className="text-base font-bold text-slate-900">{t('lab.perfil.examsTitle')}</h2>
                 <p className="text-xs text-slate-400 mt-1">Para cambios en los servicios contacta a hola@contigomedicina.com</p>
               </div>
               {labExams.length > 0 && (
@@ -232,7 +234,7 @@ export default function LabPerfilPage() {
             {/* Documents — upload & view (BUG 3) */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4">
               <div>
-                <h2 className="text-base font-bold text-slate-900">Documentos</h2>
+                <h2 className="text-base font-bold text-slate-900">{t('lab.perfil.docsTitle')}</h2>
                 <p className="text-xs text-slate-400 mt-1">Sube los documentos requeridos para completar tu perfil. Solo PDF, máximo 10 MB.</p>
               </div>
 

@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import { useTranslation } from 'react-i18next'
+import LanguageToggle from '../components/LanguageToggle'
 import type { Role } from '../lib/types'
 
 const roleHome: Record<Role, string> = {
@@ -90,6 +92,7 @@ const inputCls =
 export default function LoginPage() {
   const navigate = useNavigate()
   const { profile, loading } = useAuth()
+  const { t } = useTranslation()
 
   const [email, setEmail]             = useState('')
   const [password, setPassword]       = useState('')
@@ -107,7 +110,7 @@ export default function LoginPage() {
     setError(null)
     const { error: err } = await supabase.auth.signInWithPassword({ email, password })
     if (err) {
-      setError('Correo o contraseña incorrectos. Intenta de nuevo.')
+      setError(t('auth.login.wrongCredentials'))
       setSubmitting(false)
     }
   }
@@ -128,8 +131,13 @@ export default function LoginPage() {
         to="/"
         className="fixed top-4 left-4 z-10 flex items-center gap-1.5 text-white/90 hover:text-white text-sm font-medium hover:underline transition-colors"
       >
-        ← Volver al inicio
+        {t('common.backToHome')}
       </Link>
+
+      {/* Language toggle — fixed top-right */}
+      <div className="fixed top-4 right-4 z-10">
+        <LanguageToggle />
+      </div>
 
       {/* Logo + Card */}
       <div className="flex flex-col items-center w-full max-w-md">
@@ -143,9 +151,9 @@ export default function LoginPage() {
           {/* Header */}
           <div className="text-center mb-8">
             <h1 className="text-2xl font-bold" style={{ color: '#1e3a5f' }}>
-              Bienvenido de nuevo
+              {t('auth.login.welcome')}
             </h1>
-            <p className="text-slate-500 text-sm mt-1">Inicia sesión en tu cuenta Contigo</p>
+            <p className="text-slate-500 text-sm mt-1">{t('auth.login.subtitle')}</p>
           </div>
 
           {/* Error */}
@@ -161,7 +169,7 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-5">
 
             {/* Email */}
-            <Field id="email" label="Correo electrónico" icon={<MailIcon />}>
+            <Field id="email" label={t('common.email')} icon={<MailIcon />}>
               <input
                 id="email"
                 type="email"
@@ -169,13 +177,13 @@ export default function LoginPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="tu@correo.com"
+                placeholder={t('auth.login.emailPlaceholder')}
                 className={`${inputCls} pl-10 pr-4`}
               />
             </Field>
 
             {/* Password */}
-            <Field id="password" label="Contraseña" icon={<LockIcon />}>
+            <Field id="password" label={t('common.password')} icon={<LockIcon />}>
               <input
                 id="password"
                 type={showPwd ? 'text' : 'password'}
@@ -183,14 +191,14 @@ export default function LoginPage() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
+                placeholder={t('auth.login.passwordPlaceholder')}
                 className={`${inputCls} pl-10 pr-11`}
               />
               <button
                 type="button"
                 onClick={() => setShowPwd(!showPwd)}
                 className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                aria-label={showPwd ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                aria-label={showPwd ? t('auth.login.hidePassword') : t('auth.login.showPassword')}
               >
                 <EyeIcon open={showPwd} />
               </button>
@@ -209,24 +217,24 @@ export default function LoginPage() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
-                  Iniciando sesión...
+                  {t('auth.login.signingIn')}
                 </span>
-              ) : 'Iniciar sesión'}
+              ) : t('auth.login.signIn')}
             </button>
           </form>
 
           {/* Separator */}
           <div className="flex items-center gap-3 my-6">
             <hr className="flex-1 border-slate-200" />
-            <span className="text-xs text-slate-400 font-medium">o</span>
+            <span className="text-xs text-slate-400 font-medium">{t('common.or')}</span>
             <hr className="flex-1 border-slate-200" />
           </div>
 
           {/* Register link */}
           <p className="text-sm text-center text-slate-500">
-            ¿No tienes cuenta?{' '}
+            {t('auth.login.noAccount')}{' '}
             <Link to="/registro" className="font-semibold text-blue-700 hover:text-blue-800 hover:underline transition-colors">
-              Regístrate aquí
+              {t('auth.login.registerHere')}
             </Link>
           </p>
 

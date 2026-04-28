@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import NavBar from '../../components/NavBar'
+import { useTranslation } from 'react-i18next'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type RealLab = {
@@ -37,17 +38,19 @@ function formatDate(d: string) {
 }
 
 function StatusBadge({ status }: { status: string }) {
+  const { t } = useTranslation()
   if (status === 'pending')
-    return <span className="shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full bg-orange-100 text-orange-700 border border-orange-200">Pendiente</span>
+    return <span className="shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full bg-orange-100 text-orange-700 border border-orange-200">{t('patient.examenes.statusPending')}</span>
   if (status === 'scheduled')
-    return <span className="shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 border border-blue-200">Agendado</span>
-  return <span className="shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">Completado ✓</span>
+    return <span className="shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 border border-blue-200">{t('patient.examenes.statusScheduled')}</span>
+  return <span className="shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">{t('patient.examenes.statusCompleted')}</span>
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function PatientExamenesPage() {
   const { profile } = useAuth()
+  const { t } = useTranslation()
 
   const [orders, setOrders]   = useState<DiagOrder[]>([])
   const [loading, setLoading] = useState(true)
@@ -134,7 +137,7 @@ export default function PatientExamenesPage() {
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file || !uploadOrder || !profile) return
-    if (file.size > 10 * 1024 * 1024) { setUploadErr('El archivo no puede superar 10 MB.'); return }
+    if (file.size > 10 * 1024 * 1024) { setUploadErr(t('patient.examenes.fileTooLarge')); return }
 
     setUploading(true)
     setUploadErr(null)
@@ -147,7 +150,7 @@ export default function PatientExamenesPage() {
       .upload(path, file, { upsert: true })
 
     if (upErr) {
-      setUploadErr('No se pudo subir el archivo. Intenta de nuevo.')
+      setUploadErr(t('patient.examenes.cannotUpload'))
       setUploading(false)
       return
     }
@@ -191,7 +194,7 @@ export default function PatientExamenesPage() {
       }).catch(() => {})
     }
 
-    setUploadOk('✅ Resultado subido exitosamente. Tu médico ha sido notificado.')
+    setUploadOk(t('patient.examenes.uploadSuccess'))
     await fetchOrders()
     setUploading(false)
   }
@@ -205,8 +208,8 @@ export default function PatientExamenesPage() {
 
       <main className="max-w-3xl mx-auto px-4 py-8 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Exámenes Diagnósticos</h1>
-          <p className="text-slate-500 text-sm mt-1">Gestiona los exámenes ordenados por tu médico.</p>
+          <h1 className="text-2xl font-bold text-slate-900">{t('patient.examenes.title')}</h1>
+          <p className="text-slate-500 text-sm mt-1">{t('patient.examenes.subtitle')}</p>
         </div>
 
         {loading ? (
@@ -218,7 +221,7 @@ export default function PatientExamenesPage() {
             {/* ── Pending ── */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
               <div className="flex items-center gap-2 mb-5">
-                <h2 className="text-base font-bold text-slate-900">🔬 Exámenes pendientes</h2>
+                <h2 className="text-base font-bold text-slate-900">{t('patient.examenes.pendingTitle')}</h2>
                 {pending.length > 0 && (
                   <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">{pending.length}</span>
                 )}
@@ -229,7 +232,7 @@ export default function PatientExamenesPage() {
                   <svg className="w-10 h-10 text-slate-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                   </svg>
-                  <p className="text-slate-500 text-sm font-medium">No tienes exámenes pendientes</p>
+                  <p className="text-slate-500 text-sm font-medium">{t('patient.examenes.noPending')}</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -259,7 +262,7 @@ export default function PatientExamenesPage() {
                           disabled={order.status === 'scheduled'}
                           className="flex-1 py-2 rounded-lg border border-blue-200 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          {order.status === 'scheduled' ? '📅 Agendado' : 'Agendar examen'}
+                          {order.status === 'scheduled' ? t('patient.examenes.scheduled') : t('patient.examenes.scheduleExam')}
                         </button>
                         <button
                           onClick={() => {
@@ -269,7 +272,7 @@ export default function PatientExamenesPage() {
                           }}
                           className="flex-1 py-2 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 transition-colors"
                         >
-                          📎 Subir resultado
+                          {t('patient.examenes.uploadResult')}
                         </button>
                       </div>
                     </div>
@@ -280,10 +283,10 @@ export default function PatientExamenesPage() {
 
             {/* ── Completed ── */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-              <h2 className="text-base font-bold text-slate-900 mb-5">✅ Exámenes realizados</h2>
+              <h2 className="text-base font-bold text-slate-900 mb-5">{t('patient.examenes.completedTitle')}</h2>
 
               {completed.length === 0 ? (
-                <p className="text-slate-500 text-sm text-center py-6">No tienes exámenes completados.</p>
+                <p className="text-slate-500 text-sm text-center py-6">{t('patient.examenes.noCompleted')}</p>
               ) : (
                 <div className="space-y-3">
                   {completed.map((order) => (
@@ -291,7 +294,7 @@ export default function PatientExamenesPage() {
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-bold text-slate-900">{order.exam_type}</p>
                         <p className="text-xs text-slate-500 mt-0.5">Dr(a). {order.doctor?.full_name ?? '—'}</p>
-                        <p className="text-xs text-emerald-700 font-semibold mt-1">Resultado disponible ✓</p>
+                        <p className="text-xs text-emerald-700 font-semibold mt-1">{t('patient.examenes.resultAvailable')}</p>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <StatusBadge status={order.status} />
@@ -302,7 +305,7 @@ export default function PatientExamenesPage() {
                             rel="noopener noreferrer"
                             className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-colors"
                           >
-                            Ver resultado
+                            {t('patient.examenes.resultAvailable')}
                           </a>
                         )}
                       </div>
@@ -329,8 +332,8 @@ export default function PatientExamenesPage() {
             <div className="px-7 pt-7 pb-7 space-y-5">
               <div className="flex items-start justify-between">
                 <div>
-                  <h2 className="text-lg font-bold text-slate-900">Agendar tu examen</h2>
-                  <p className="text-sm text-slate-500 mt-0.5">Selecciona un laboratorio y horario disponible</p>
+                  <h2 className="text-lg font-bold text-slate-900">{t('patient.examenes.scheduleTitle')}</h2>
+                  <p className="text-sm text-slate-500 mt-0.5">{t('patient.examenes.scheduleSubtitle')}</p>
                   <span className="inline-block mt-2 text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-100 px-3 py-1.5 rounded-lg">
                     🔬 {scheduleOrder.exam_type}
                   </span>
@@ -362,7 +365,7 @@ export default function PatientExamenesPage() {
               ) : realLabs.length === 0 ? (
                 <>
                   <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800">
-                    No hay centros disponibles en tu ciudad actualmente. Nos pondremos en contacto contigo pronto.
+                    {t('patient.examenes.noCenters')}
                   </div>
                   <button onClick={() => setScheduleOrder(null)}
                     className="w-full py-3 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
@@ -372,7 +375,7 @@ export default function PatientExamenesPage() {
               ) : (
                 <>
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Centro</label>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">{t('patient.examenes.centerLabel')}</label>
                     <div className="space-y-2">
                       {realLabs.map((lab) => (
                         <button key={lab.id} type="button"
@@ -393,11 +396,11 @@ export default function PatientExamenesPage() {
                     const slots = lab?.available_slots ?? []
                     return slots.length === 0 ? (
                       <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-3">
-                        Este centro no tiene horarios disponibles.
+                        {t('patient.examenes.noSlots')}
                       </p>
                     ) : (
                       <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Horario disponible</label>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">{t('patient.examenes.timeLabel')}</label>
                         <div className="grid grid-cols-2 gap-2 max-h-44 overflow-y-auto pr-1">
                           {slots.map((slot) => {
                             const [y,m,d] = slot.date.split('-')
@@ -421,12 +424,12 @@ export default function PatientExamenesPage() {
                   <div className="flex gap-3">
                     <button onClick={() => setScheduleOrder(null)} disabled={scheduling}
                       className="flex-1 py-3 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50">
-                      Cancelar
+                      {t('common.cancel')}
                     </button>
                     <button onClick={handleSchedule}
                       disabled={!selectedLabId || !selectedSlotId || scheduling}
                       className="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors disabled:opacity-50">
-                      {scheduling ? 'Agendando...' : 'Confirmar'}
+                      {scheduling ? t('common.scheduling') : t('common.confirm')}
                     </button>
                   </div>
                 </>
@@ -447,9 +450,9 @@ export default function PatientExamenesPage() {
             className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-7"
             style={{ animation: 'modal-in 0.2s ease-out' }}
           >
-            <h2 className="text-lg font-bold text-slate-900 mb-1">Subir resultado</h2>
+            <h2 className="text-lg font-bold text-slate-900 mb-1">{t('patient.examenes.uploadTitle')}</h2>
             <p className="text-sm text-slate-600 font-medium mb-0.5">🔬 {uploadOrder.exam_type}</p>
-            <p className="text-xs text-slate-400 mb-5">PDF, JPG o PNG · Máximo 10 MB</p>
+            <p className="text-xs text-slate-400 mb-5">{t('patient.examenes.uploadHelper')}</p>
 
             {uploadOk ? (
               <div className="space-y-4">
@@ -474,14 +477,14 @@ export default function PatientExamenesPage() {
                   {uploading ? (
                     <>
                       <div className="w-6 h-6 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin" />
-                      <span>Subiendo...</span>
+                      <span>{t('patient.examenes.uploading')}</span>
                     </>
                   ) : (
                     <>
                       <svg className="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                       </svg>
-                      <span>Seleccionar archivo</span>
+                      <span>{t('patient.examenes.selectFile')}</span>
                     </>
                   )}
                 </button>
@@ -496,7 +499,7 @@ export default function PatientExamenesPage() {
                   onClick={() => setUploadOrder(null)}
                   className="w-full py-3 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
                 >
-                  Cancelar
+                  {t('common.cancel')}
                 </button>
               </div>
             )}

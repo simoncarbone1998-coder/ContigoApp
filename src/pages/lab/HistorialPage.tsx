@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useLabContext } from '../../contexts/LabContext'
 import LabNavBar from '../../components/LabNavBar'
+import { useTranslation } from 'react-i18next'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type HistoryItem = any
@@ -18,6 +19,7 @@ function formatDateTime(ts: string) {
 }
 
 export default function LabHistorialPage() {
+  const { t } = useTranslation()
   const { lab: session } = useLabContext()
   const [history,    setHistory]    = useState<HistoryItem[]>([])
   const [loading,    setLoading]    = useState(true)
@@ -48,8 +50,8 @@ export default function LabHistorialPage() {
 
       <main className="max-w-5xl mx-auto px-4 py-8 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Historial de exámenes</h1>
-          <p className="text-slate-500 text-sm mt-1">Todos los exámenes completados con resultados subidos.</p>
+          <h1 className="text-2xl font-bold text-slate-900">{t('lab.historial.title')}</h1>
+          <p className="text-slate-500 text-sm mt-1">{t('lab.historial.subtitle')}</p>
         </div>
 
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -60,12 +62,12 @@ export default function LabHistorialPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
               <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar por paciente..."
+                placeholder={t('lab.historial.searchPlaceholder')}
                 className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400" />
             </div>
             <select value={filterExam} onChange={(e) => setFilterExam(e.target.value)}
               className="border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 bg-white">
-              <option value="">Todos los exámenes</option>
+              <option value="">{t('lab.historial.allExams')}</option>
               {allExams.map((ex) => <option key={ex} value={ex}>{ex}</option>)}
             </select>
           </div>

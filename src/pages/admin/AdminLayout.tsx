@@ -3,6 +3,8 @@ import { NavLink, Outlet, useNavigate, Navigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { AdminContext } from './AdminContext'
+import { useTranslation } from 'react-i18next'
+import LanguageToggle from '../../components/LanguageToggle'
 import type { Profile, Appointment, PatientApplication, UnderwritingRulebook } from '../../lib/types'
 import type { Role } from '../../lib/types'
 import { specialtyLabel } from '../../lib/types'
@@ -60,6 +62,7 @@ function SidebarSection({ label, children }: { label: string; children: React.Re
 
 function LogoBrand() {
   const [imgFailed, setImgFailed] = useState(false)
+  const { t } = useTranslation()
   return (
     <div className="flex items-center gap-3">
       {!imgFailed ? (
@@ -67,7 +70,7 @@ function LogoBrand() {
       ) : (
         <span className="text-white font-bold text-xl leading-none">contigo</span>
       )}
-      <p className="text-white/60 text-[10px] leading-tight">Panel de administración</p>
+      <p className="text-white/60 text-[10px] leading-tight">{t('admin.sidebar.title')}</p>
     </div>
   )
 }
@@ -76,6 +79,7 @@ function Sidebar({ pendingPatients, pendingDoctors, pendingLabs, email, onSignOu
   pendingPatients: number; pendingDoctors: number; pendingLabs: number; email: string | null
   onSignOut: () => void; mobileOpen: boolean; onMobileClose: () => void
 }) {
+  const { t } = useTranslation()
   const sidebarStyle = { background: 'linear-gradient(to bottom, #1e3a5f, #16a34a)' }
 
   const inner = (
@@ -87,28 +91,29 @@ function Sidebar({ pendingPatients, pendingDoctors, pendingLabs, email, onSignOu
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-3 space-y-0 overflow-y-auto">
-        <SidebarSection label="Aprobaciones">
-          <SidebarLink to="/admin/aprobaciones/pacientes"    label="Pacientes"          badge={pendingPatients} />
-          <SidebarLink to="/admin/aprobaciones/medicos"      label="Médicos"            badge={pendingDoctors} />
-          <SidebarLink to="/admin/aprobaciones/laboratorios" label="Centros Diagnóstico" badge={pendingLabs} />
+        <SidebarSection label={t('admin.sidebar.approvals')}>
+          <SidebarLink to="/admin/aprobaciones/pacientes"    label={t('admin.sidebar.patients')}  badge={pendingPatients} />
+          <SidebarLink to="/admin/aprobaciones/medicos"      label={t('admin.sidebar.doctors')}   badge={pendingDoctors} />
+          <SidebarLink to="/admin/aprobaciones/laboratorios" label={t('admin.sidebar.labs')}      badge={pendingLabs} />
         </SidebarSection>
         <SidebarSection label="Company Data">
-          <SidebarLink to="/admin/data/metricas"       label="Métricas" />
-          <SidebarLink to="/admin/data/usuarios"       label="Usuarios" />
-          <SidebarLink to="/admin/data/citas"          label="Citas" />
-          <SidebarLink to="/admin/data/calificaciones" label="Calificaciones" />
+          <SidebarLink to="/admin/data/metricas"       label={t('admin.sidebar.metrics')} />
+          <SidebarLink to="/admin/data/usuarios"       label={t('admin.sidebar.users')} />
+          <SidebarLink to="/admin/data/citas"          label={t('admin.sidebar.appointments')} />
+          <SidebarLink to="/admin/data/calificaciones" label={t('admin.sidebar.ratings')} />
         </SidebarSection>
-        <SidebarSection label="AI Bots">
-          <SidebarLink to="/admin/bots/underwriting" label="Underwriting" />
-          <SidebarLink to="/admin/bots/chat"         label="Chat IA" />
+        <SidebarSection label={t('admin.sidebar.aiBots')}>
+          <SidebarLink to="/admin/bots/underwriting" label={t('admin.sidebar.underwriting')} />
+          <SidebarLink to="/admin/bots/chat"         label={t('admin.sidebar.aiChat')} />
         </SidebarSection>
       </nav>
 
       {/* Footer */}
-      <div className="px-5 py-4 border-t border-white/10">
-        <p className="text-white/60 text-xs truncate mb-2">{email ?? '—'}</p>
+      <div className="px-5 py-4 border-t border-white/10 space-y-2">
+        <LanguageToggle />
+        <p className="text-white/60 text-xs truncate">{email ?? '—'}</p>
         <button onClick={onSignOut} className="text-white/60 hover:text-white text-xs font-medium transition-colors">
-          Cerrar sesión →
+          {t('common.signOut')} →
         </button>
       </div>
     </div>

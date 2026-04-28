@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import NavBar from '../../components/NavBar'
+import { useTranslation } from 'react-i18next'
 import type { DoctorEarning } from '../../lib/types'
 
 function formatDate(d: string) {
@@ -17,6 +18,7 @@ function formatCurrency(n: number) {
 export default function DoctorFinanzasPage() {
   const { profile } = useAuth()
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [earnings, setEarnings] = useState<DoctorEarning[]>([])
   const [loading, setLoading]   = useState(true)
   const [error, setError]       = useState<string | null>(null)
@@ -36,7 +38,7 @@ export default function DoctorFinanzasPage() {
       .select('*, appointment:appointment_id(id, reason, summary, created_at, patient:patient_id(id, full_name, email), slot:slot_id(*))')
       .eq('doctor_id', profile.id)
       .order('created_at', { ascending: false })
-    if (err) setError('No se pudieron cargar las ganancias.')
+    if (err) setError(t('doctor.finanzas.cannotLoad'))
     else setEarnings((data ?? []) as DoctorEarning[])
     setLoading(false)
   }, [profile])
@@ -49,9 +51,9 @@ export default function DoctorFinanzasPage() {
   const monthTotal     = monthEarnings.reduce((s, e) => s + Number(e.amount), 0)
 
   const stats = [
-    { label: 'Total ganado', value: formatCurrency(totalEarned), icon: '💰', color: 'text-emerald-700', bg: 'bg-emerald-50' },
-    { label: 'Este mes', value: formatCurrency(monthTotal), icon: '📅', color: 'text-blue-700', bg: 'bg-blue-50' },
-    { label: 'Citas completadas', value: earnings.length, icon: '✅', color: 'text-violet-700', bg: 'bg-violet-50' },
+    { label: t('doctor.finanzas.totalEarned'), value: formatCurrency(totalEarned), icon: '💰', color: 'text-emerald-700', bg: 'bg-emerald-50' },
+    { label: t('doctor.finanzas.thisMonth'), value: formatCurrency(monthTotal), icon: '📅', color: 'text-blue-700', bg: 'bg-blue-50' },
+    { label: t('doctor.finanzas.completedAppointments'), value: earnings.length, icon: '✅', color: 'text-violet-700', bg: 'bg-violet-50' },
   ]
 
   return (
@@ -60,8 +62,8 @@ export default function DoctorFinanzasPage() {
 
       <main className="max-w-4xl mx-auto px-4 py-8 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Gestión Financiera</h1>
-          <p className="text-slate-500 text-sm mt-1">Resumen de tus ingresos por consultas completadas.</p>
+          <h1 className="text-2xl font-bold text-slate-900">{t('doctor.finanzas.title')}</h1>
+          <p className="text-slate-500 text-sm mt-1">{t('doctor.finanzas.subtitle')}</p>
         </div>
 
         {/* Stats */}

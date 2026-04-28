@@ -3,6 +3,8 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { SPECIALTIES } from '../lib/types'
+import { useTranslation } from 'react-i18next'
+import LanguageToggle from '../components/LanguageToggle'
 import type { Role } from '../lib/types'
 
 const roleHome: Record<Role, string> = {
@@ -58,16 +60,17 @@ function DocFileField({ label, helper, file, inputRef, optional, onChange }: {
   inputRef: React.RefObject<HTMLInputElement | null>; optional?: boolean
   onChange: (f: File) => void
 }) {
+  const { t } = useTranslation()
   return (
     <div>
       <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-0.5">
-        {label}{optional && <span className="normal-case font-normal text-slate-400 ml-1">(opcional)</span>}
+        {label}{optional && <span className="normal-case font-normal text-slate-400 ml-1">({t('common.optional')})</span>}
       </p>
       <p className="text-xs text-slate-400 mb-1.5">{helper}</p>
       <div className="flex items-center gap-2 flex-wrap">
         <button type="button" onClick={() => inputRef.current?.click()}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors">
-          📎 {file ? 'Cambiar archivo' : 'Seleccionar archivo'}
+          📎 {file ? t('common.changeFile') : t('common.selectFile')}
         </button>
         {file && <span className="text-xs text-emerald-700 font-medium truncate max-w-[160px]">✓ {file.name}</span>}
         <input ref={inputRef} type="file" accept="image/*,application/pdf" className="hidden"
@@ -85,6 +88,7 @@ export default function RegistroPage() {
   const navigate        = useNavigate()
   const [searchParams]  = useSearchParams()
   const { profile, loading, refreshProfile } = useAuth()
+  const { t } = useTranslation()
 
   // Derive initial mode from ?role= param
   const roleParam = searchParams.get('role')
@@ -147,15 +151,18 @@ export default function RegistroPage() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center px-4 py-12" style={BG}>
         <Link to="/" className="fixed top-4 left-4 z-10 flex items-center gap-1.5 text-white/90 hover:text-white text-sm font-medium hover:underline transition-colors">
-          ← Volver al inicio
+          {t('common.backToHome')}
         </Link>
+        <div className="fixed top-4 right-4 z-10">
+          <LanguageToggle />
+        </div>
 
         <Link to="/" className="mb-8"><Logo /></Link>
 
         <div className="w-full max-w-3xl">
           <div className="text-center mb-8">
-            <h1 className="text-2xl font-bold text-white mb-2">¿Cómo quieres unirte a Contigo?</h1>
-            <p className="text-white/70 text-sm">Elige tu rol para comenzar</p>
+            <h1 className="text-2xl font-bold text-white mb-2">{t('auth.registro.title')}</h1>
+            <p className="text-white/70 text-sm">{t('auth.registro.subtitle')}</p>
           </div>
 
           <div className="grid sm:grid-cols-3 gap-4">
@@ -165,12 +172,12 @@ export default function RegistroPage() {
               className="group bg-white rounded-2xl p-8 text-left hover:border-blue-400 border-2 border-transparent transition-all hover:shadow-xl hover:-translate-y-0.5 duration-200"
             >
               <div className="text-5xl mb-4">🧑‍⚕️</div>
-              <h2 className="text-lg font-bold text-slate-900 mb-1">Soy paciente</h2>
+              <h2 className="text-lg font-bold text-slate-900 mb-1">{t('auth.registro.patientRole')}</h2>
               <p className="text-slate-500 text-sm mb-6 leading-relaxed">
-                Accede a citas médicas desde casa y recibe tus medicamentos a domicilio.
+                {t('auth.registro.patientDesc')}
               </p>
               <div className="w-full py-3 bg-blue-600 group-hover:bg-blue-700 text-white font-semibold rounded-xl text-sm text-center transition-colors">
-                Registrarme como paciente
+                {t('auth.registro.registerAsPatient')}
               </div>
             </button>
 
@@ -180,12 +187,12 @@ export default function RegistroPage() {
               className="group bg-white rounded-2xl p-8 text-left hover:border-emerald-400 border-2 border-transparent transition-all hover:shadow-xl hover:-translate-y-0.5 duration-200"
             >
               <div className="text-5xl mb-4">👨‍⚕️</div>
-              <h2 className="text-lg font-bold text-slate-900 mb-1">Soy médico</h2>
+              <h2 className="text-lg font-bold text-slate-900 mb-1">{t('auth.registro.doctorRole')}</h2>
               <p className="text-slate-500 text-sm mb-6 leading-relaxed">
-                Atiende pacientes en línea y genera ingresos con una agenda flexible.
+                {t('auth.registro.doctorDesc')}
               </p>
               <div className="w-full py-3 bg-emerald-600 group-hover:bg-emerald-700 text-white font-semibold rounded-xl text-sm text-center transition-colors">
-                Registrarme como médico
+                {t('auth.registro.registerAsDoctor')}
               </div>
             </button>
 
@@ -195,19 +202,19 @@ export default function RegistroPage() {
               className="group bg-white rounded-2xl p-8 text-left hover:border-violet-400 border-2 border-transparent transition-all hover:shadow-xl hover:-translate-y-0.5 duration-200"
             >
               <div className="text-5xl mb-4">🔬</div>
-              <h2 className="text-lg font-bold text-slate-900 mb-1">Soy centro de diagnóstico</h2>
+              <h2 className="text-lg font-bold text-slate-900 mb-1">{t('auth.registro.labRole')}</h2>
               <p className="text-slate-500 text-sm mb-6 leading-relaxed">
-                Registra tu centro diagnóstico y gestiona órdenes de exámenes.
+                {t('auth.registro.labDesc')}
               </p>
               <div className="w-full py-3 bg-violet-600 group-hover:bg-violet-700 text-white font-semibold rounded-xl text-sm text-center transition-colors">
-                Registrar mi centro
+                {t('auth.registro.registerLab')}
               </div>
             </button>
           </div>
 
           <p className="text-center mt-6 text-sm text-white/70">
-            ¿Ya tienes cuenta?{' '}
-            <Link to="/login" className="text-white font-semibold hover:underline">Iniciar sesión →</Link>
+            {t('auth.registro.alreadyHaveAccount')}{' '}
+            <Link to="/login" className="text-white font-semibold hover:underline">{t('auth.registro.signInArrow')}</Link>
           </p>
         </div>
       </div>
@@ -216,8 +223,8 @@ export default function RegistroPage() {
 
   // ── Shared submit validation ─────────────────────────────────────────────
   function validateBase(): boolean {
-    if (password !== confirmPassword) { setError('Las contraseñas no coinciden.'); return false }
-    if (password.length < 6)          { setError('La contraseña debe tener al menos 6 caracteres.'); return false }
+    if (password !== confirmPassword) { setError(t('auth.registro.passwordsMismatch')); return false }
+    if (password.length < 6)          { setError(t('auth.registro.passwordTooShort')); return false }
     return true
   }
 
@@ -233,16 +240,16 @@ export default function RegistroPage() {
     if (signUpError || !signUpData.user) {
       const msg = (signUpError?.message ?? '').toLowerCase()
       if (msg.includes('already registered') || msg.includes('already exists')) {
-        setEmailExists(true); setError('Este correo ya está registrado.')
+        setEmailExists(true); setError(t('auth.registro.emailExists'))
       } else if (msg.includes('password')) {
-        setError('La contraseña debe tener al menos 6 caracteres.')
+        setError(t('auth.registro.passwordTooShort'))
       } else {
-        setError('No se pudo crear la cuenta. Intenta de nuevo.')
+        setError(t('auth.registro.couldNotCreate'))
       }
       setSubmitting(false); return
     }
     if (!signUpData.session) {
-      setError('Revisa tu correo para confirmar tu cuenta antes de iniciar sesión.')
+      setError(t('auth.registro.confirmEmail'))
       setSubmitting(false); return
     }
 
@@ -251,7 +258,7 @@ export default function RegistroPage() {
       { onConflict: 'id' }
     )
     if (profileError) {
-      setError('Cuenta creada, pero hubo un error al guardar el perfil. Intenta iniciar sesión.')
+      setError(t('auth.registro.profileError'))
       setSubmitting(false); return
     }
 
@@ -264,11 +271,11 @@ export default function RegistroPage() {
     e.preventDefault()
     setError(null)
     setEmailExists(false)
-    if (!specialty)         { setError('Selecciona tu especialidad.'); return }
-    if (!university.trim()) { setError('Ingresa tu universidad de pregrado.'); return }
-    if (!medLicense.trim()) { setError('Ingresa tu número de tarjeta profesional.'); return }
-    if (!cedulaFile)        { setError('Sube tu cédula de ciudadanía.'); return }
-    if (!diplomaFile)       { setError('Sube tu diploma de pregrado.'); return }
+    if (!specialty)         { setError(t('auth.registro.selectSpecialty')); return }
+    if (!university.trim()) { setError(t('auth.registro.universityPlaceholder')); return }
+    if (!medLicense.trim()) { setError(t('auth.registro.licensePlaceholder')); return }
+    if (!cedulaFile)        { setError(t('auth.registro.cedulaHelper')); return }
+    if (!diplomaFile)       { setError(t('auth.registro.diplomaHelper')); return }
     if (!validateBase()) return
     setSubmitting(true)
 
@@ -276,16 +283,16 @@ export default function RegistroPage() {
     if (signUpError || !signUpData.user) {
       const msg = (signUpError?.message ?? '').toLowerCase()
       if (msg.includes('already registered') || msg.includes('already exists')) {
-        setEmailExists(true); setError('Este correo ya está registrado.')
+        setEmailExists(true); setError(t('auth.registro.emailExists'))
       } else if (msg.includes('password')) {
-        setError('La contraseña debe tener al menos 6 caracteres.')
+        setError(t('auth.registro.passwordTooShort'))
       } else {
-        setError('No se pudo crear la cuenta. Intenta de nuevo.')
+        setError(t('auth.registro.couldNotCreate'))
       }
       setSubmitting(false); return
     }
     if (!signUpData.session) {
-      setError('Revisa tu correo para confirmar tu cuenta antes de iniciar sesión.')
+      setError(t('auth.registro.confirmEmail'))
       setSubmitting(false); return
     }
 
@@ -305,7 +312,7 @@ export default function RegistroPage() {
       { onConflict: 'id' }
     )
     if (profileError) {
-      setError('Cuenta creada, pero hubo un error al guardar el perfil. Intenta iniciar sesión.')
+      setError(t('auth.registro.profileError'))
       setSubmitting(false); return
     }
 
@@ -362,15 +369,18 @@ export default function RegistroPage() {
 
   // ── Shared form chrome ───────────────────────────────────────────────────
   const isDoctor  = mode === 'doctor'
-  const title     = isDoctor ? 'Registro de médico' : 'Crea tu cuenta'
-  const subtitle  = isDoctor ? 'Completa tu información profesional' : 'Únete a Contigo y recupera el control de tu salud'
+  const title     = isDoctor ? t('auth.registro.doctorTitle') : t('auth.registro.patientTitle')
+  const subtitle  = isDoctor ? t('auth.registro.doctorSubtitle') : t('auth.registro.patientSubtitle')
   const onSubmit  = isDoctor ? handleDoctorSubmit : handlePatientSubmit
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-12" style={BG}>
       <Link to="/" className="fixed top-4 left-4 z-10 flex items-center gap-1.5 text-white/90 hover:text-white text-sm font-medium hover:underline transition-colors">
-        ← Volver al inicio
+        {t('common.backToHome')}
       </Link>
+      <div className="fixed top-4 right-4 z-10">
+        <LanguageToggle />
+      </div>
 
       <div className="flex flex-col items-center w-full max-w-md">
         <Link to="/" className="mb-6"><Logo /></Link>
@@ -379,13 +389,13 @@ export default function RegistroPage() {
 
           {/* Back to role selector */}
           <button onClick={() => setMode('select')} className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 mb-6 transition-colors">
-            ← Cambiar rol
+            {t('auth.registro.changeRole')}
           </button>
 
           {/* Role pill */}
           <div className="flex justify-center mb-6">
             <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${isDoctor ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>
-              {isDoctor ? '👨‍⚕️ Médico' : '🧑‍⚕️ Paciente'}
+              {isDoctor ? t('auth.registro.doctorPill') : t('auth.registro.patientPill')}
             </span>
           </div>
 
@@ -401,7 +411,7 @@ export default function RegistroPage() {
               </svg>
               <span>
                 {error}{' '}
-                {emailExists && <Link to="/login" className="font-semibold underline hover:text-red-800 transition-colors">¿Quieres iniciar sesión?</Link>}
+                {emailExists && <Link to="/login" className="font-semibold underline hover:text-red-800 transition-colors">{t('auth.registro.wantSignIn')}</Link>}
               </span>
             </div>
           )}
@@ -409,25 +419,25 @@ export default function RegistroPage() {
           <form onSubmit={onSubmit} className="space-y-4">
 
             {/* Nombre */}
-            <Field id="fullName" label="Nombre completo" icon={<PersonIcon />}>
+            <Field id="fullName" label={t('common.fullName')} icon={<PersonIcon />}>
               <input id="fullName" type="text" autoComplete="name" required value={fullName}
-                onChange={(e) => setFullName(e.target.value)} placeholder="Dr. Juan Pérez"
+                onChange={(e) => setFullName(e.target.value)} placeholder={t('auth.registro.namePlaceholder')}
                 className={`${inputCls} pl-10 pr-4`} style={{ paddingLeft: '2.5rem' }} />
               <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><PersonIcon /></span>
             </Field>
 
             {/* Correo */}
-            <Field id="email" label="Correo electrónico" icon={<MailIcon />}>
+            <Field id="email" label={t('common.email')} icon={<MailIcon />}>
               <input id="email" type="email" autoComplete="email" required value={email}
-                onChange={(e) => setEmail(e.target.value)} placeholder="tu@correo.com"
+                onChange={(e) => setEmail(e.target.value)} placeholder={t('auth.registro.emailPlaceholder')}
                 className={`${inputCls} pl-10 pr-4`} style={{ paddingLeft: '2.5rem' }} />
               <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><MailIcon /></span>
             </Field>
 
             {/* Teléfono */}
-            <Field id="phone" label="Teléfono" icon={<PhoneIcon />}>
+            <Field id="phone" label={t('common.phone')} icon={<PhoneIcon />}>
               <input id="phone" type="tel" autoComplete="tel" required value={phone}
-                onChange={(e) => setPhone(e.target.value)} placeholder="ej: 3001234567"
+                onChange={(e) => setPhone(e.target.value)} placeholder={t('auth.registro.phonePlaceholder')}
                 className={`${inputCls} pl-10 pr-4`} style={{ paddingLeft: '2.5rem' }} />
               <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><PhoneIcon /></span>
             </Field>
@@ -435,15 +445,15 @@ export default function RegistroPage() {
             {/* Patient-only fields */}
             {!isDoctor && (
               <>
-                <Field id="city" label="Ciudad" icon={<MapPinIcon />}>
+                <Field id="city" label={t('common.city')} icon={<MapPinIcon />}>
                   <input id="city" type="text" autoComplete="address-level2" required value={city}
-                    onChange={(e) => setCity(e.target.value)} placeholder="ej: Bogotá"
+                    onChange={(e) => setCity(e.target.value)} placeholder={t('auth.registro.cityPlaceholder')}
                     className={`${inputCls} pl-10 pr-4`} style={{ paddingLeft: '2.5rem' }} />
                   <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><MapPinIcon /></span>
                 </Field>
-                <Field id="deliveryAddress" label="Dirección" icon={<HomeIcon />}>
+                <Field id="deliveryAddress" label={t('common.address')} icon={<HomeIcon />}>
                   <input id="deliveryAddress" type="text" autoComplete="street-address" required value={deliveryAddress}
-                    onChange={(e) => setDeliveryAddress(e.target.value)} placeholder="ej: Calle 123 #45-67, Apto 201"
+                    onChange={(e) => setDeliveryAddress(e.target.value)} placeholder={t('auth.registro.addressPlaceholder')}
                     className={`${inputCls} pl-10 pr-4`} style={{ paddingLeft: '2.5rem' }} />
                   <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><HomeIcon /></span>
                 </Field>
@@ -454,44 +464,44 @@ export default function RegistroPage() {
             {isDoctor && (
               <>
                 <div>
-                  <label htmlFor="specialty" className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Especialidad</label>
+                  <label htmlFor="specialty" className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{t('auth.registro.specialty')}</label>
                   <select id="specialty" required value={specialty} onChange={(e) => setSpecialty(e.target.value)}
                     className={`${inputCls} px-4`}>
-                    <option value="">Seleccionar especialidad...</option>
+                    <option value="">{t('auth.registro.selectSpecialty')}</option>
                     {SPECIALTIES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                   </select>
                 </div>
 
-                <Field id="university" label="Universidad de pregrado" icon={<IdIcon />}>
+                <Field id="university" label={t('auth.registro.university')} icon={<IdIcon />}>
                   <input id="university" type="text" required value={university}
-                    onChange={(e) => setUniversity(e.target.value)} placeholder="ej: Universidad Nacional de Colombia"
+                    onChange={(e) => setUniversity(e.target.value)} placeholder={t('auth.registro.universityPlaceholder')}
                     className={`${inputCls} pl-10 pr-4`} style={{ paddingLeft: '2.5rem' }} />
                   <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><IdIcon /></span>
                 </Field>
 
-                <Field id="medLicense" label="Número de tarjeta profesional" icon={<IdIcon />}>
+                <Field id="medLicense" label={t('auth.registro.professionalCard')} icon={<IdIcon />}>
                   <input id="medLicense" type="text" required value={medLicense}
-                    onChange={(e) => setMedLicense(e.target.value)} placeholder="ej: 12345-2024"
+                    onChange={(e) => setMedLicense(e.target.value)} placeholder={t('auth.registro.licensePlaceholder')}
                     className={`${inputCls} pl-10 pr-4`} style={{ paddingLeft: '2.5rem' }} />
                   <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><IdIcon /></span>
-                  <p className="mt-1 text-xs text-slate-400">Tu número de registro médico en Colombia</p>
+                  <p className="mt-1 text-xs text-slate-400">{t('auth.registro.licenseHelper')}</p>
                 </Field>
 
                 {/* Document uploads */}
                 <div className="pt-2 border-t border-slate-100">
-                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Documentos</p>
-                  <p className="text-xs text-slate-400 mb-4">PDF o imagen, máx. 10 MB por archivo.</p>
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">{t('auth.registro.documentsTitle')}</p>
+                  <p className="text-xs text-slate-400 mb-4">{t('auth.registro.documentsHelper')}</p>
                   <div className="space-y-4">
                     <DocFileField
-                      label="Cédula de ciudadanía"
-                      helper="Sube una foto o PDF de tu documento de identidad"
+                      label={t('auth.registro.cedulaLabel')}
+                      helper={t('auth.registro.cedulaHelper')}
                       file={cedulaFile}
                       inputRef={cedulaRef}
                       onChange={setCedulaFile}
                     />
                     <DocFileField
-                      label="Diploma de pregrado"
-                      helper="Diploma o acta de grado de medicina"
+                      label={t('auth.registro.diplomaLabel')}
+                      helper={t('auth.registro.diplomaHelper')}
                       file={diplomaFile}
                       inputRef={diplomaRef}
                       onChange={setDiplomaFile}
@@ -501,12 +511,12 @@ export default function RegistroPage() {
                         <input type="checkbox" checked={hasEspecializ}
                           onChange={(e) => setHasEspecializ(e.target.checked)}
                           className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
-                        <span className="text-xs font-semibold text-slate-600">Tengo especialización médica</span>
+                        <span className="text-xs font-semibold text-slate-600">{t('auth.registro.hasSpecialization')}</span>
                       </label>
                       {hasEspecializ && (
                         <DocFileField
-                          label="Diploma de especialización"
-                          helper="Diploma o acta de grado de tu especialización"
+                          label={t('auth.registro.specializationLabel')}
+                          helper={t('auth.registro.specializationHelper')}
                           file={especializFile}
                           inputRef={especializRef}
                           optional
@@ -520,7 +530,7 @@ export default function RegistroPage() {
             )}
 
             {/* Contraseña */}
-            <Field id="password" label="Contraseña" icon={<LockIcon />}>
+            <Field id="password" label={t('common.password')} icon={<LockIcon />}>
               <input id="password" type={showPwd ? 'text' : 'password'} autoComplete="new-password" required value={password}
                 onChange={(e) => setPassword(e.target.value)} placeholder="••••••••"
                 className={`${inputCls} pl-10 pr-11`} style={{ paddingLeft: '2.5rem' }} />
@@ -529,11 +539,11 @@ export default function RegistroPage() {
                 className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors" aria-label="Toggle password">
                 <EyeIcon open={showPwd} />
               </button>
-              <p className="mt-1.5 text-xs text-slate-400">Mínimo 6 caracteres</p>
+              <p className="mt-1.5 text-xs text-slate-400">{t('auth.registro.minChars')}</p>
             </Field>
 
             {/* Confirmar contraseña */}
-            <Field id="confirmPassword" label="Confirmar contraseña" icon={<LockIcon />}>
+            <Field id="confirmPassword" label={t('common.confirmPassword')} icon={<LockIcon />}>
               <input id="confirmPassword" type={showConfirmPwd ? 'text' : 'password'} autoComplete="new-password" required value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)} placeholder="••••••••"
                 className={`${inputCls} pl-10 pr-11`} style={{ paddingLeft: '2.5rem' }} />
@@ -546,7 +556,7 @@ export default function RegistroPage() {
 
             {isDoctor && (
               <p className="text-xs text-slate-500 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-                ⏳ Tu cuenta será revisada por nuestro equipo antes de ser activada. Te notificaremos por email.
+                {t('auth.registro.doctorPendingNote')}
               </p>
             )}
 
@@ -559,15 +569,15 @@ export default function RegistroPage() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
-                  {isDoctor ? 'Enviando solicitud...' : 'Creando cuenta...'}
+                  {isDoctor ? t('auth.registro.sendingRequest') : t('auth.registro.creatingAccount')}
                 </span>
-              ) : (isDoctor ? 'Enviar solicitud' : 'Crear cuenta')}
+              ) : (isDoctor ? t('auth.registro.sendRequest') : t('auth.registro.createAccount'))}
             </button>
           </form>
 
           <p className="mt-7 text-sm text-center text-slate-500">
-            ¿Ya tienes cuenta?{' '}
-            <Link to="/login" className="font-semibold text-blue-700 hover:text-blue-800 hover:underline transition-colors">Inicia sesión aquí</Link>
+            {t('auth.registro.haveAccount')}{' '}
+            <Link to="/login" className="font-semibold text-blue-700 hover:text-blue-800 hover:underline transition-colors">{t('auth.registro.signInHere')}</Link>
           </p>
         </div>
       </div>

@@ -3,6 +3,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import NavBar from '../../components/NavBar'
 import { specialtyLabel } from '../../lib/types'
+import { useTranslation } from 'react-i18next'
 import type { Prescription } from '../../lib/types'
 
 function formatDate(d: string) {
@@ -12,6 +13,7 @@ function formatDate(d: string) {
 
 export default function PatientPastillasPage() {
   const { profile, refreshProfile } = useAuth()
+  const { t } = useTranslation()
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([])
   const [loading, setLoading]             = useState(true)
   const [error, setError]                 = useState<string | null>(null)
@@ -38,7 +40,7 @@ export default function PatientPastillasPage() {
       `)
       .eq('patient_id', profile.id)
       .order('created_at', { ascending: false })
-    if (err) setError('No se pudieron cargar las recetas.')
+    if (err) setError(t('patient.pastillas.cannotLoad'))
     else setPrescriptions((data ?? []) as Prescription[])
     setLoading(false)
   }, [profile])
@@ -56,7 +58,7 @@ export default function PatientPastillasPage() {
     if (!selected || !profile) return
     const trimmedAddress = address.trim()
     if (!trimmedAddress) {
-      setConfirmError('Por favor ingresa una dirección de entrega.')
+      setConfirmError(t('patient.pastillas.missingAddress'))
       return
     }
     setConfirming(true)
@@ -72,7 +74,7 @@ export default function PatientPastillasPage() {
       .eq('id', selected.id)
 
     if (updErr) {
-      setConfirmError('No se pudo confirmar la entrega. Intenta de nuevo.')
+      setConfirmError(t('patient.pastillas.cannotConfirm'))
       setConfirming(false)
       return
     }
@@ -83,7 +85,7 @@ export default function PatientPastillasPage() {
     }
 
     setSelected(null)
-    setSuccessMsg('¡Tu pedido está en camino!')
+    setSuccessMsg(t('patient.pastillas.orderInTransit'))
     await fetchPrescriptions()
     setConfirming(false)
   }
@@ -97,8 +99,8 @@ export default function PatientPastillasPage() {
 
       <main className="max-w-3xl mx-auto px-4 py-8 space-y-8">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Mis Pastillas</h1>
-          <p className="text-slate-500 text-sm mt-1">Recetas médicas y envío de medicamentos.</p>
+          <h1 className="text-2xl font-bold text-slate-900">{t('patient.pastillas.title')}</h1>
+          <p className="text-slate-500 text-sm mt-1">{t('patient.pastillas.subtitle')}</p>
         </div>
 
         {successMsg && (
@@ -109,7 +111,7 @@ export default function PatientPastillasPage() {
             </svg>
             <div>
               <p className="font-semibold">{successMsg}</p>
-              <p className="text-emerald-700 mt-0.5">Tu pedido fue confirmado y está en camino a tu dirección.</p>
+              <p className="text-emerald-700 mt-0.5">{t('patient.pastillas.orderSent')}</p>
             </div>
           </div>
         )}
@@ -127,13 +129,13 @@ export default function PatientPastillasPage() {
             {/* ── Pendientes ── */}
             <section className="space-y-3">
               <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wide">
-                Pendientes de confirmar
+                {t('patient.pastillas.pendingTitle')}
               </h2>
               {pendientes.length === 0 ? (
                 <EmptyState
                   icon={<PillIcon />}
-                  text="No tienes recetas pendientes"
-                  sub="Cuando tu médico te recete medicamentos aparecerán aquí."
+                  text={t('patient.pastillas.noPending')}
+                  sub={t('patient.pastillas.noPendingDesc')}
                 />
               ) : (
                 <div className="space-y-4">
@@ -151,13 +153,13 @@ export default function PatientPastillasPage() {
             {/* ── En camino ── */}
             <section className="space-y-3">
               <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wide">
-                En camino
+                {t('patient.pastillas.inTransitTitle')}
               </h2>
               {enCamino.length === 0 ? (
                 <EmptyState
                   icon={<TruckIcon />}
-                  text="No tienes pedidos en camino"
-                  sub="Las recetas confirmadas aparecerán aquí."
+                  text={t('patient.pastillas.noInTransit')}
+                  sub={t('patient.pastillas.noInTransitDesc')}
                 />
               ) : (
                 <div className="space-y-4">
@@ -184,7 +186,7 @@ export default function PatientPastillasPage() {
           >
             <div className="flex items-start justify-between mb-5">
               <div>
-                <h2 className="text-lg font-bold text-slate-900">Confirmar dirección de entrega</h2>
+                <h2 className="text-lg font-bold text-slate-900">{t('patient.pastillas.deliveryTitle')}</h2>
                 <p className="text-sm text-slate-500 mt-0.5">Dr(a). {selected.doctor?.full_name ?? '—'}</p>
               </div>
               <button
@@ -200,7 +202,7 @@ export default function PatientPastillasPage() {
 
             {/* Medication summary */}
             <div className="mb-5 p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-1.5">
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Medicamentos</p>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">{t('patient.pastillas.medications')}</p>
               {(selected.items ?? []).map((item, i) => (
                 <p key={i} className="text-sm text-slate-700">
                   <span className="font-semibold">{item.medicine_name}</span>
@@ -217,14 +219,14 @@ export default function PatientPastillasPage() {
 
             <div className="mb-4">
               <label htmlFor="deliveryAddr" className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
-                Dirección de entrega
+                {t('patient.pastillas.deliveryAddressLabel')}
               </label>
               <textarea
                 id="deliveryAddr"
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
                 rows={3}
-                placeholder="Calle 123 # 45-67, Barrio, Ciudad..."
+                placeholder={t('patient.pastillas.deliveryPlaceholder')}
                 className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors resize-none"
               />
             </div>
@@ -236,7 +238,7 @@ export default function PatientPastillasPage() {
                 onChange={(e) => setSaveDefault(e.target.checked)}
                 className="w-4 h-4 rounded border-slate-300 accent-blue-600"
               />
-              <span className="text-sm text-slate-700">Guardar como mi dirección por defecto</span>
+              <span className="text-sm text-slate-700">{t('patient.pastillas.saveDefault')}</span>
             </label>
 
             <div className="flex gap-3">
@@ -244,13 +246,13 @@ export default function PatientPastillasPage() {
                 onClick={() => setSelected(null)} disabled={confirming}
                 className="flex-1 py-3 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50"
               >
-                Cancelar
+                {t('common.cancel')}
               </button>
               <button
                 onClick={handleConfirm} disabled={confirming}
                 className="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors disabled:opacity-50 shadow-sm shadow-blue-100"
               >
-                {confirming ? 'Confirmando...' : 'Confirmar entrega'}
+                {confirming ? t('patient.pastillas.confirmingBtn') : t('patient.pastillas.confirmDelivery')}
               </button>
             </div>
           </div>
@@ -269,6 +271,7 @@ function PrescriptionCard({
   prescription: Prescription
   onConfirm?: () => void
 }) {
+  const { t } = useTranslation()
   const slot        = prescription.appointment?.slot
   const isPendiente = prescription.status === 'pendiente'
 
@@ -290,7 +293,7 @@ function PrescriptionCard({
             ? 'bg-orange-50 text-orange-700 border-orange-200'
             : 'bg-emerald-50 text-emerald-700 border-emerald-200'
         }`}>
-          {isPendiente ? 'Pendiente' : 'En camino'}
+          {isPendiente ? t('patient.pastillas.statusPending') : t('patient.pastillas.statusInTransit')}
         </span>
       </div>
 
@@ -315,12 +318,12 @@ function PrescriptionCard({
       {!isPendiente && prescription.delivery_address && (
         <div className="pt-3 border-t border-slate-100">
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">
-            Dirección de entrega
+            {t('patient.pastillas.deliveryAddressLabel')}
           </p>
           <p className="text-sm text-slate-700">{prescription.delivery_address}</p>
           {prescription.confirmed_at && (
             <p className="text-xs text-slate-400 mt-1">
-              Confirmado el{' '}
+              {t('patient.pastillas.confirmedAt')}{' '}
               {new Date(prescription.confirmed_at).toLocaleDateString('es-CO', {
                 day: '2-digit', month: 'short', year: 'numeric',
               })}
@@ -335,7 +338,7 @@ function PrescriptionCard({
           onClick={onConfirm}
           className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors shadow-sm shadow-blue-100"
         >
-          Confirmar dirección de entrega
+          {t('patient.pastillas.confirmDelivery')}
         </button>
       )}
     </div>

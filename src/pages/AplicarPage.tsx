@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import { useTranslation } from 'react-i18next'
+import LanguageToggle from '../components/LanguageToggle'
 
 const BG     = { background: 'linear-gradient(135deg, #1e3a5f 0%, #16a34a 100%)' }
 const BTN_BG = { background: 'linear-gradient(135deg, #1e3a5f 0%, #16a34a 100%)' }
@@ -9,17 +11,7 @@ const BTN_BG = { background: 'linear-gradient(135deg, #1e3a5f 0%, #16a34a 100%)'
 const inputCls =
   'w-full border border-slate-200 rounded-xl py-3 px-4 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors'
 
-const CONDITIONS = [
-  'Diabetes',
-  'Hipertensión arterial',
-  'Enfermedad cardíaca o coronaria',
-  'Cáncer activo o en tratamiento',
-  'Enfermedad renal crónica',
-  'Enfermedad pulmonar crónica (EPOC, asma severa)',
-  'Enfermedad autoinmune (lupus, artritis reumatoide)',
-  'VIH/SIDA',
-  'Ninguna de las anteriores',
-]
+// Conditions are defined in translation files
 
 function Logo() {
   const [err, setErr] = useState(false)
@@ -36,7 +28,8 @@ function EyeIcon({ open }: { open: boolean }) {
 }
 
 function ProgressBar({ step }: { step: number }) {
-  const steps = ['Tu información', 'Tu salud', 'Evaluando', 'Confirmación']
+  const { t } = useTranslation()
+  const steps = [t('auth.aplicar.step1Label'), t('auth.aplicar.step2Label'), t('auth.aplicar.step3Label'), t('auth.aplicar.step4Label')]
   return (
     <div className="w-full mb-8">
       <div className="flex items-center justify-between mb-2">
@@ -66,6 +59,19 @@ function ProgressBar({ step }: { step: number }) {
 export default function AplicarPage() {
   const navigate = useNavigate()
   const { profile, loading } = useAuth()
+  const { t } = useTranslation()
+
+  const CONDITIONS = [
+    t('auth.aplicar.conditionDiabetes'),
+    t('auth.aplicar.conditionHypertension'),
+    t('auth.aplicar.conditionCardiac'),
+    t('auth.aplicar.conditionCancer'),
+    t('auth.aplicar.conditionKidney'),
+    t('auth.aplicar.conditionLung'),
+    t('auth.aplicar.conditionAutoimmune'),
+    t('auth.aplicar.conditionHIV'),
+    t('auth.aplicar.conditionNone'),
+  ]
 
   useEffect(() => {
     if (!loading && profile) {
@@ -145,27 +151,27 @@ export default function AplicarPage() {
 
   // ── Step 1 validation ──
   function validateStep1(): boolean {
-    if (!fullName.trim()) { setError('Por favor ingresa tu nombre completo.'); return false }
-    if (!email.trim())    { setEmailError('Por favor ingresa un correo electrónico válido'); return false }
-    if (!isValidEmail(email)) { setEmailError('Por favor ingresa un correo electrónico válido'); return false }
-    if (!phone.trim())    { setError('Por favor ingresa tu teléfono.'); return false }
-    if (!city.trim())     { setError('Por favor ingresa tu ciudad.'); return false }
-    if (!address.trim())  { setError('Por favor ingresa tu dirección.'); return false }
-    if (password.length < 6) { setError('La contraseña debe tener al menos 6 caracteres.'); return false }
-    if (password !== confirmPassword) { setError('Las contraseñas no coinciden.'); return false }
+    if (!fullName.trim()) { setError(t('auth.aplicar.validationName')); return false }
+    if (!email.trim())    { setEmailError(t('auth.aplicar.validationEmail')); return false }
+    if (!isValidEmail(email)) { setEmailError(t('auth.aplicar.validationEmail')); return false }
+    if (!phone.trim())    { setError(t('auth.aplicar.validationPhone')); return false }
+    if (!city.trim())     { setError(t('auth.aplicar.validationCity')); return false }
+    if (!address.trim())  { setError(t('auth.aplicar.validationAddress')); return false }
+    if (password.length < 6) { setError(t('auth.aplicar.validationPasswordShort')); return false }
+    if (password !== confirmPassword) { setError(t('auth.aplicar.validationPasswordMismatch')); return false }
     return true
   }
 
   // ── Step 2 validation ──
   function validateStep2(): boolean {
-    if (!dob)                            { setError('Por favor ingresa tu fecha de nacimiento.'); return false }
-    if (!sex)                            { setError('Por favor selecciona tu sexo biológico.'); return false }
-    if (conditions.length === 0)         { setError('Por favor indica tus condiciones médicas (o selecciona "Ninguna").'); return false }
-    if (hospitalized === null)           { setError('Por favor indica si has sido hospitalizado.'); return false }
-    if (activeTreatment === null)        { setError('Por favor indica si estás en tratamiento activo.'); return false }
-    if (regularMeds === null)            { setError('Por favor indica si tomas medicamentos regularmente.'); return false }
-    if (!smokingStatus)                  { setError('Por favor indica tu estado tabáquico.'); return false }
-    if (hasEps === null)                 { setError('Por favor indica si tienes EPS activa.'); return false }
+    if (!dob)                            { setError(t('auth.aplicar.validationBirthDate')); return false }
+    if (!sex)                            { setError(t('auth.aplicar.validationSex')); return false }
+    if (conditions.length === 0)         { setError(t('auth.aplicar.validationConditions')); return false }
+    if (hospitalized === null)           { setError(t('auth.aplicar.validationHospitalized')); return false }
+    if (activeTreatment === null)        { setError(t('auth.aplicar.validationActiveTreatment')); return false }
+    if (regularMeds === null)            { setError(t('auth.aplicar.validationMedications')); return false }
+    if (!smokingStatus)                  { setError(t('auth.aplicar.validationSmoking')); return false }
+    if (hasEps === null)                 { setError(t('auth.aplicar.validationEPS')); return false }
     return true
   }
 
@@ -283,8 +289,11 @@ export default function AplicarPage() {
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-12" style={BG}>
       <Link to="/" className="fixed top-4 left-4 z-10 flex items-center gap-1.5 text-white/90 hover:text-white text-sm font-medium hover:underline transition-colors">
-        ← Volver al inicio
+        {t('auth.aplicar.backToHome')}
       </Link>
+      <div className="fixed top-4 right-4 z-10">
+        <LanguageToggle />
+      </div>
 
       <div className="flex flex-col items-center w-full max-w-lg">
         <Link to="/" className="mb-6"><Logo /></Link>
@@ -295,24 +304,24 @@ export default function AplicarPage() {
             <ProgressBar step={0} />
 
             <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-800">
-              Completa tu aplicación para unirte a Contigo. Revisaremos tu información en las próximas 48 horas.
+              {t('auth.aplicar.mainTitle')} {t('auth.aplicar.mainSubtitle')}
             </div>
 
-            <h1 className="text-xl font-bold text-slate-900 mb-1">Tu información personal</h1>
-            <p className="text-slate-500 text-sm mb-6">Paso 1 de 2</p>
+            <h1 className="text-xl font-bold text-slate-900 mb-1">{t('auth.aplicar.step1Title')}</h1>
+            <p className="text-slate-500 text-sm mb-6">{t('auth.aplicar.stepIndicator', { step: 1 })}</p>
 
             {error && (
               <div className="mb-5 flex gap-2 p-3.5 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
                 <span>{error}</span>
                 {error.includes('ya está registrado') && (
-                  <Link to="/login" className="font-semibold underline ml-1">Iniciar sesión</Link>
+                  <Link to="/login" className="font-semibold underline ml-1">{t('auth.aplicar.signIn')}</Link>
                 )}
               </div>
             )}
 
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Nombre completo</label>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{t('common.fullName')}</label>
                 <input type="text" required value={fullName} onChange={(e) => setFullName(e.target.value)}
                   placeholder="Ej: María García" className={inputCls} />
               </div>
@@ -324,7 +333,7 @@ export default function AplicarPage() {
                   value={email}
                   onChange={(e) => { setEmail(e.target.value); setEmailError(null) }}
                   onBlur={() => {
-                    if (email && !isValidEmail(email)) setEmailError('Por favor ingresa un correo electrónico válido')
+                    if (email && !isValidEmail(email)) setEmailError(t('auth.aplicar.validationEmail'))
                   }}
                   placeholder="tu@correo.com"
                   className={inputCls + (emailError ? ' !border-red-400 focus:!border-red-400 focus:!ring-red-400/20' : '')}
@@ -366,10 +375,10 @@ export default function AplicarPage() {
                     <EyeIcon open={showPwd} />
                   </button>
                 </div>
-                <p className="mt-1 text-xs text-slate-400">Mínimo 6 caracteres</p>
+                <p className="mt-1 text-xs text-slate-400">{t('auth.aplicar.validationPasswordShort')}</p>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Confirmar contraseña</label>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{t('common.confirmPassword')}</label>
                 <div className="relative">
                   <input type={showConfirmPwd ? 'text' : 'password'} required value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)} placeholder="••••••••"
@@ -383,13 +392,13 @@ export default function AplicarPage() {
 
               <button onClick={goToStep2} disabled={!email.trim()} style={BTN_BG}
                 className="w-full mt-2 text-white font-semibold py-3.5 rounded-xl text-sm hover:shadow-lg hover:scale-[1.01] active:scale-[0.99] transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100 disabled:shadow-none">
-                Continuar →
+                {t('auth.aplicar.continueArrow')}
               </button>
             </div>
 
             <p className="mt-6 text-sm text-center text-slate-500">
-              ¿Ya tienes cuenta?{' '}
-              <Link to="/login" className="font-semibold text-blue-700 hover:underline">Iniciar sesión</Link>
+              {t('auth.aplicar.alreadyHaveAccount')}{' '}
+              <Link to="/login" className="font-semibold text-blue-700 hover:underline">{t('auth.aplicar.signIn')}</Link>
             </p>
           </div>
         )}
@@ -399,8 +408,8 @@ export default function AplicarPage() {
           <form onSubmit={handleSubmit} className="w-full bg-white rounded-2xl shadow-2xl px-8 py-10">
             <ProgressBar step={1} />
 
-            <h1 className="text-xl font-bold text-slate-900 mb-1">Cuéntanos sobre tu salud</h1>
-            <p className="text-slate-500 text-sm mb-6">Esta información es confidencial y nos ayuda a personalizar tu plan de atención</p>
+            <h1 className="text-xl font-bold text-slate-900 mb-1">{t('auth.aplicar.step2Title')}</h1>
+            <p className="text-slate-500 text-sm mb-6">{t('auth.aplicar.step2Subtitle')}</p>
 
             {error && (
               <div className="mb-5 p-3.5 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">{error}</div>
@@ -409,18 +418,18 @@ export default function AplicarPage() {
             <div className="space-y-6">
               {/* DOB */}
               <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Fecha de nacimiento</label>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{t('auth.aplicar.birthDateLabel')}</label>
                 <input type="date" value={dob} onChange={(e) => setDob(e.target.value)} className={inputCls} />
                 {dob && calcAge() !== null && (
-                  <p className="mt-1 text-xs text-slate-500">Tienes {calcAge()} años</p>
+                  <p className="mt-1 text-xs text-slate-500">{t('auth.aplicar.ageText', { age: calcAge() })}</p>
                 )}
               </div>
 
               {/* Sex */}
               <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Sexo biológico</label>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">{t('auth.aplicar.sexLabel')}</label>
                 <div className="flex gap-3 flex-wrap">
-                  {[['masculino', 'Masculino'], ['femenino', 'Femenino'], ['otro', 'Prefiero no indicar']].map(([val, label]) => (
+                  {[['masculino', t('auth.aplicar.sexMale')], ['femenino', t('auth.aplicar.sexFemale')], ['otro', t('auth.aplicar.sexPreferNotSay')]].map(([val, label]) => (
                     <label key={val} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 cursor-pointer text-sm font-medium transition-colors ${sex === val ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-600 hover:border-slate-300'}`}>
                       <input type="radio" name="sex" value={val} checked={sex === val} onChange={() => setSex(val)} className="sr-only" />
                       {label}
@@ -431,7 +440,7 @@ export default function AplicarPage() {
 
               {/* Conditions */}
               <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">¿Tienes alguna de estas condiciones médicas?</label>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">{t('auth.aplicar.conditionsLabel')}</label>
                 <div className="space-y-2">
                   {CONDITIONS.map((cond) => (
                     <label key={cond} className={`flex items-start gap-3 p-3 rounded-xl border-2 cursor-pointer text-sm transition-colors ${conditions.includes(cond) ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-300'}`}>
@@ -445,9 +454,9 @@ export default function AplicarPage() {
 
               {/* Hospitalized */}
               <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">¿Has sido hospitalizado en los últimos 12 meses?</label>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">{t('auth.aplicar.hospitalizedLabel')}</label>
                 <div className="flex gap-3">
-                  {[['true', 'Sí'], ['false', 'No']].map(([val, label]) => (
+                  {[['true', t('common.yes')], ['false', t('common.no')]].map(([val, label]) => (
                     <label key={val} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 cursor-pointer text-sm font-medium transition-colors ${String(hospitalized) === val ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-600 hover:border-slate-300'}`}>
                       <input type="radio" name="hospitalized" value={val} checked={String(hospitalized) === val}
                         onChange={() => setHospitalized(val === 'true')} className="sr-only" />
@@ -458,16 +467,16 @@ export default function AplicarPage() {
                 {hospitalized && (
                   <div className="mt-2">
                     <input type="text" value={hospitalReason} onChange={(e) => setHospitalReason(e.target.value)}
-                      placeholder="¿Por qué motivo? (opcional)" className={inputCls} />
+                      placeholder={t('auth.aplicar.hospitalizedReason')} className={inputCls} />
                   </div>
                 )}
               </div>
 
               {/* Active treatment */}
               <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">¿Estás en tratamiento médico activo actualmente?</label>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">{t('auth.aplicar.activeTreatmentLabel')}</label>
                 <div className="flex gap-3">
-                  {[['true', 'Sí'], ['false', 'No']].map(([val, label]) => (
+                  {[['true', t('common.yes')], ['false', t('common.no')]].map(([val, label]) => (
                     <label key={val} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 cursor-pointer text-sm font-medium transition-colors ${String(activeTreatment) === val ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-600 hover:border-slate-300'}`}>
                       <input type="radio" name="activeTreatment" value={val} checked={String(activeTreatment) === val}
                         onChange={() => setActiveTreatment(val === 'true')} className="sr-only" />
@@ -479,9 +488,9 @@ export default function AplicarPage() {
 
               {/* Regular meds */}
               <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">¿Tomas medicamentos de forma regular?</label>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">{t('auth.aplicar.medicationsLabel')}</label>
                 <div className="flex gap-3">
-                  {[['true', 'Sí'], ['false', 'No']].map(([val, label]) => (
+                  {[['true', t('common.yes')], ['false', t('common.no')]].map(([val, label]) => (
                     <label key={val} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 cursor-pointer text-sm font-medium transition-colors ${String(regularMeds) === val ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-600 hover:border-slate-300'}`}>
                       <input type="radio" name="regularMeds" value={val} checked={String(regularMeds) === val}
                         onChange={() => setRegularMeds(val === 'true')} className="sr-only" />
@@ -492,20 +501,20 @@ export default function AplicarPage() {
                 {regularMeds && (
                   <div className="mt-2">
                     <input type="text" value={medsDetail} onChange={(e) => setMedsDetail(e.target.value)}
-                      placeholder="¿Cuáles? (opcional)" className={inputCls} />
+                      placeholder={t('auth.aplicar.medicationsWhich')} className={inputCls} />
                   </div>
                 )}
               </div>
 
               {/* Smoking */}
               <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">¿Fumas o consumes tabaco?</label>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">{t('auth.aplicar.smokingLabel')}</label>
                 <div className="grid grid-cols-2 gap-2">
                   {[
-                    ['no_fumo', 'No fumo'],
-                    ['exfumador', 'Exfumador (dejé hace más de 1 año)'],
-                    ['ocasional', 'Fumador ocasional'],
-                    ['regular', 'Fumador regular'],
+                    ['no_fumo', t('auth.aplicar.smokingNo')],
+                    ['exfumador', t('auth.aplicar.smokingFormer')],
+                    ['ocasional', t('auth.aplicar.smokingOccasional')],
+                    ['regular', t('auth.aplicar.smokingRegular')],
                   ].map(([val, label]) => (
                     <label key={val} className={`flex items-center gap-2 p-3 rounded-xl border-2 cursor-pointer text-sm transition-colors ${smokingStatus === val ? 'border-blue-500 bg-blue-50 text-blue-700 font-medium' : 'border-slate-200 text-slate-600 hover:border-slate-300'}`}>
                       <input type="radio" name="smoking" value={val} checked={smokingStatus === val}
@@ -518,9 +527,9 @@ export default function AplicarPage() {
 
               {/* EPS */}
               <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">¿Tienes EPS activa en Colombia?</label>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">{t('auth.aplicar.epsLabel')}</label>
                 <div className="flex gap-3">
-                  {[['true', 'Sí'], ['false', 'No']].map(([val, label]) => (
+                  {[['true', t('common.yes')], ['false', t('common.no')]].map(([val, label]) => (
                     <label key={val} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 cursor-pointer text-sm font-medium transition-colors ${String(hasEps) === val ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-600 hover:border-slate-300'}`}>
                       <input type="radio" name="hasEps" value={val} checked={String(hasEps) === val}
                         onChange={() => setHasEps(val === 'true')} className="sr-only" />
@@ -532,17 +541,17 @@ export default function AplicarPage() {
 
               {/* Legal disclaimer */}
               <p className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 leading-relaxed">
-                Al continuar, autorizas a Contigo a utilizar esta información para evaluar tu elegibilidad. Tus datos son confidenciales y nunca serán compartidos con terceros.
+                {t('auth.aplicar.consentText')}
               </p>
 
               <div className="flex gap-3">
                 <button type="button" onClick={() => { setStep(0); setError(null); window.scrollTo(0, 0) }}
                   className="flex-1 py-3.5 rounded-xl border-2 border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
-                  ← Atrás
+                  {t('auth.aplicar.backBtn')}
                 </button>
                 <button type="submit" disabled={submitting} style={BTN_BG}
                   className="flex-1 py-3.5 rounded-xl text-white font-semibold text-sm hover:shadow-lg transition-all disabled:opacity-60 disabled:cursor-not-allowed">
-                  Enviar aplicación →
+                  {t('auth.aplicar.submitArrow')}
                 </button>
               </div>
             </div>
@@ -560,14 +569,14 @@ export default function AplicarPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
                 </svg>
               </div>
-              <h2 className="text-xl font-bold text-slate-900 mb-2">Evaluando tu aplicación...</h2>
-              <p className="text-slate-500 text-sm">Esto tomará solo un momento</p>
+              <h2 className="text-xl font-bold text-slate-900 mb-2">{t('auth.aplicar.evaluatingTitle')}</h2>
+              <p className="text-slate-500 text-sm">{t('auth.aplicar.evaluatingSubtitle')}</p>
             </div>
 
             <div className="w-full bg-slate-100 rounded-full h-2 mb-4 overflow-hidden">
               <div className="h-full rounded-full animate-pulse" style={{ width: '70%', background: 'linear-gradient(90deg, #2563eb, #16a34a)' }} />
             </div>
-            <p className="text-xs text-slate-400">Analizando tu información de salud...</p>
+            <p className="text-xs text-slate-400">{t('auth.aplicar.evaluatingDetail')}</p>
           </div>
         )}
 
@@ -582,22 +591,22 @@ export default function AplicarPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              <h2 className="text-2xl font-bold text-slate-900 mb-3">¡Aplicación recibida!</h2>
+              <h2 className="text-2xl font-bold text-slate-900 mb-3">{t('auth.aplicar.receivedTitle')}</h2>
               <p className="text-slate-600 text-sm leading-relaxed mb-4">
-                Hemos recibido tu aplicación para Contigo. Estamos evaluando tu información y te notificaremos por email en las próximas 48 horas.
+                {t('auth.aplicar.receivedText')}
               </p>
               <div className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-50 rounded-xl border border-blue-200">
                 <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                 </svg>
-                <span className="text-sm font-medium text-blue-800">Te escribiremos a {appliedEmail || email}</span>
+                <span className="text-sm font-medium text-blue-800">{t('auth.aplicar.receivedEmail', { email: appliedEmail || email })}</span>
               </div>
             </div>
 
             <Link to="/login"
               className="inline-flex items-center justify-center w-full py-3.5 rounded-xl text-white font-semibold text-sm hover:shadow-lg transition-all"
               style={BTN_BG}>
-              Entendido
+              {t('auth.aplicar.understood')}
             </Link>
           </div>
         )}

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useLabContext } from '../../contexts/LabContext'
 import LabNavBar from '../../components/LabNavBar'
+import { useTranslation } from 'react-i18next'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Slot  = any
@@ -68,6 +69,7 @@ interface ExamSchedule {
 
 export default function LabAgendaPage() {
   const { lab } = useLabContext()
+  const { t } = useTranslation()
   const [slots,     setSlots]     = useState<Slot[]>([])
   const [appts,     setAppts]     = useState<Appt[]>([])
   const [loading,   setLoading]   = useState(true)
@@ -260,7 +262,7 @@ export default function LabAgendaPage() {
       )}
 
       <main className="max-w-5xl mx-auto px-4 py-8 space-y-6">
-        <h1 className="text-2xl font-bold text-slate-900">Agenda</h1>
+        <h1 className="text-2xl font-bold text-slate-900">{t('lab.agenda.title')}</h1>
 
         {loading ? (
           <div className="flex justify-center py-12">
@@ -277,12 +279,12 @@ export default function LabAgendaPage() {
                 </h2>
                 <button onClick={openWizard}
                   className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-colors">
-                  + Agregar disponibilidad
+                  + {t('lab.agenda.addAvailability')}
                 </button>
               </div>
 
               {freeSlots.length === 0 ? (
-                <p className="text-slate-400 text-sm text-center py-6">No tienes horarios disponibles. Agrega disponibilidad para recibir pacientes.</p>
+                <p className="text-slate-400 text-sm text-center py-6">{t('lab.agenda.noSlots')}</p>
               ) : (
                 <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
                   {freeSlots.map((slot: Slot) => (
@@ -325,7 +327,7 @@ export default function LabAgendaPage() {
               </h2>
 
               {appts.length === 0 ? (
-                <p className="text-slate-400 text-sm text-center py-6">No hay citas programadas.</p>
+                <p className="text-slate-400 text-sm text-center py-6">{t('lab.agenda.noAppointments')}</p>
               ) : (
                 <div className="space-y-3">
                   {appts.map((appt: Appt) => (
@@ -360,7 +362,7 @@ export default function LabAgendaPage() {
             {/* Header */}
             <div className="flex items-center justify-between px-7 pt-6 pb-4 border-b border-slate-100 shrink-0">
               <div>
-                <h2 className="text-lg font-bold text-slate-900">Agregar disponibilidad</h2>
+                <h2 className="text-lg font-bold text-slate-900">{t('lab.agenda.addAvailability')}</h2>
                 <p className="text-xs text-slate-400 mt-0.5">Paso {wizStep} de 3</p>
               </div>
               <button onClick={closeWizard} className="text-slate-400 hover:text-slate-600 text-xl">×</button>
@@ -636,7 +638,7 @@ export default function LabAgendaPage() {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-7 space-y-5"
             style={{ animation: 'modal-in 0.2s ease-out' }}>
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-slate-900">Detalle de cita</h2>
+              <h2 className="text-lg font-bold text-slate-900">{t('lab.agenda.detailTitle')}</h2>
               <button onClick={() => setDetailAppt(null)} className="text-slate-400 hover:text-slate-600 text-xl">×</button>
             </div>
 
@@ -665,14 +667,14 @@ export default function LabAgendaPage() {
                 {uploading ? (
                   <>
                     <div className="w-6 h-6 border-2 border-emerald-300 border-t-emerald-600 rounded-full animate-spin" />
-                    <span>Subiendo resultado...</span>
+                    <span>{t('lab.agenda.uploadingResult')}</span>
                   </>
                 ) : (
                   <>
                     <svg className="w-8 h-8 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                     </svg>
-                    <span>Subir resultado (PDF / imagen, máx. 20 MB)</span>
+                    <span>{t('lab.agenda.uploadResultBtn')}</span>
                   </>
                 )}
               </button>

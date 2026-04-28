@@ -1,10 +1,12 @@
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useLabContext } from '../../contexts/LabContext'
+import { useTranslation } from 'react-i18next'
 
 export default function LabRejectedPage() {
   const navigate = useNavigate()
   const { lab }  = useLabContext()
+  const { t } = useTranslation()
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -18,13 +20,13 @@ export default function LabRejectedPage() {
       <div className="w-full max-w-md space-y-4">
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 text-center space-y-4">
           <div className="text-5xl">❌</div>
-          <h1 className="text-xl font-bold text-slate-900">Tu solicitud no fue aprobada</h1>
+          <h1 className="text-xl font-bold text-slate-900">{t('lab.rejected.title')}</h1>
           <p className="text-slate-500 text-sm leading-relaxed">
             Lamentablemente no pudimos aprobar tu centro en este momento.
           </p>
           {lab?.rejection_reason && (
             <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700 text-left">
-              <p className="font-semibold mb-1">Motivo:</p>
+              <p className="font-semibold mb-1">{t('lab.rejected.reason')}</p>
               <p>{lab.rejection_reason}</p>
             </div>
           )}
@@ -32,14 +34,14 @@ export default function LabRejectedPage() {
 
         <div className="text-center space-y-4">
           <p className="text-sm text-slate-400">
-            Para más información escríbenos a{' '}
+            {t('common.questions')}{' '}
             <a href="mailto:hola@contigomedicina.com" className="text-blue-600 hover:underline font-medium">
-              hola@contigomedicina.com
+              {t('common.contactEmail')}
             </a>
           </p>
           <button onClick={handleLogout}
             className="w-full py-3 border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
-            Cerrar sesión
+            {t('lab.rejected.signOut')}
           </button>
         </div>
       </div>
